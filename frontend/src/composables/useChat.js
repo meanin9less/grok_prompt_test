@@ -1,13 +1,14 @@
 import { ref, nextTick } from 'vue'
 import { sendMessage } from '../services/grokApi'
 
-export function useChat(apiPath, saveHistoryCallback, scrollToBottomCallback) {
+export function useChat(apiPath, saveHistoryCallback, scrollToBottomCallback, selectedModel = null) {
   const messages = ref([])
   const inputMessage = ref('')
   const isLoading = ref(false)
   const messagesContainer = ref(null)
   const textareaRef = ref(null)
   const isComposing = ref(false)
+  const selectedModel_ = ref(selectedModel)
 
   const handleCompositionStart = () => {
     isComposing.value = true
@@ -58,7 +59,7 @@ export function useChat(apiPath, saveHistoryCallback, scrollToBottomCallback) {
         if (assistantMsg) {
           assistantMsg.text += chunk
         }
-      }, apiPath, history)
+      }, apiPath, history, selectedModel_.value)
 
       saveHistoryCallback()
       await scrollToBottomCallback()
@@ -99,6 +100,7 @@ export function useChat(apiPath, saveHistoryCallback, scrollToBottomCallback) {
     messagesContainer,
     textareaRef,
     isComposing,
+    selectedModel: selectedModel_,
     handleCompositionStart,
     handleCompositionEnd,
     handleSendMessage,

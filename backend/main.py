@@ -1,3 +1,4 @@
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from config import settings
@@ -5,6 +6,12 @@ from routes import router
 from routes import openai
 from routes import gemini
 from routes import prompts
+
+# 로깅 설정
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 # FastAPI 앱 초기화
 app = FastAPI(

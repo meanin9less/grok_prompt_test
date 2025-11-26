@@ -1,7 +1,10 @@
 import httpx
 import json
+import logging
 from config.settings import settings
-from services.prompts.grok_prompt import GROK_PROMPTS
+from services.prompts.prompts import PROMPTS
+
+logger = logging.getLogger(__name__)
 
 
 class GrokServicePrompt:
@@ -10,11 +13,17 @@ class GrokServicePrompt:
         self.base_url = settings.grok_api_base_url
         self.model = settings.grok_model
 
-    async def chat(self, message: str, history: list = None, prompt_key: str = "prompt"):
+    async def chat(self, message: str, history: list = None, prompt_key: str = "prompt", model: str = None):
         """
         Grok API에 프롬프트를 포함하여 메시지를 보내고 스트림 형식으로 응답을 받습니다.
+
+        Parameters:
+        - message: 사용자 메시지
+        - history: 대화 히스토리
+        - prompt_key: 사용할 프롬프트 키
+        - model: 사용할 모델 (미지정 시 기본값 사용)
         """
-        system_prompt = GROK_PROMPTS.get(prompt_key, GROK_PROMPTS.get("prompt", ""))
+        system_prompt = PROMPTS.get(prompt_key, PROMPTS.get("prompt", ""))
 
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -26,8 +35,12 @@ class GrokServicePrompt:
             messages.extend(history)
         messages.append({"role": "user", "content": message})
 
+        # 요청에서 지정한 모델 또는 기본값 사용
+        use_model = model if model else self.model
+        logger.info(f"Grok Chat - Using model: {use_model} (requested: {model}, default: {self.model})")
+
         payload = {
-            "model": self.model,
+            "model": use_model,
             "messages": messages,
             "stream": True,
         }

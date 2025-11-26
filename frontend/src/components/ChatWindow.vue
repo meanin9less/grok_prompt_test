@@ -8,6 +8,10 @@ const props = defineProps({
   apiPath: {
     type: String,
     default: '/api/grok/chat'
+  },
+  selectedModel: {
+    type: String,
+    default: null
   }
 })
 
@@ -22,7 +26,12 @@ const scrollToBottom = async () => {
   }
 }
 
-const chatState = useChat(props.apiPath, () => saveHistory(chatState.messages), scrollToBottom)
+const chatState = useChat(props.apiPath, () => saveHistory(chatState.messages), scrollToBottom, props.selectedModel)
+
+// selectedModel 변경 감지
+watch(() => props.selectedModel, (newModel) => {
+  chatState.selectedModel.value = newModel
+})
 
 // API 경로에 따른 제목 생성
 const getChatTitle = () => {
@@ -95,7 +104,7 @@ const handleClearChat = () => {
 
           <span class="timestamp">{{
             msg.timestamp.toLocaleTimeString()
-          }}</span>
+          }},</span>
         </div>
       </div>
 
