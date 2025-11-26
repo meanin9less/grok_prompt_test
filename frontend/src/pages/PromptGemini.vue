@@ -4,9 +4,9 @@ import ChatWindow from '../components/ChatWindow.vue'
 
 <template>
   <div class="page">
-    <h1>Grok Chat</h1>
-    <p>Chat with Grok powered by Grok API</p>
-    <ChatWindow />
+    <h1>Prompt Gemini</h1>
+    <p>Chat with Gemini using prompts</p>
+    <ChatWindow api-path="/api/gemini/prompt-chat" />
   </div>
 </template>
 

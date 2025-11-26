@@ -6,7 +6,7 @@ import ChatWindow from '../components/ChatWindow.vue'
   <div class="page">
     <h1>Prompt Grok</h1>
     <p>Chat with Grok using prompts</p>
-    <ChatWindow />
+    <ChatWindow api-path="/api/grok/prompt-chat" />
   </div>
 </template>
 

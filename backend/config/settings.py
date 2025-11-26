@@ -8,6 +8,16 @@ class Settings(BaseSettings):
     grok_api_base_url: str = "https://api.x.ai/v1"
     grok_model: str = "grok-4-1-fast-reasoning"
 
+    # OpenAI API Configuration
+    openai_api_key: Optional[str] = None
+    openai_api_base_url: str = "https://api.openai.com/v1"
+    openai_model: str = "gpt-5.1" # gpt-4o / gpt-4.1 / gpt-5.1
+
+    # Gemini API Configuration
+    gemini_api_key: Optional[str] = None
+    gemini_api_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai"
+    gemini_model: str = "gemini-2.0-flash"
+
     # FastAPI Configuration
     debug: bool = False
     app_name: str = "Grok API Backend"

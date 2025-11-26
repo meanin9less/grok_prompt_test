@@ -2,6 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from config import settings
 from routes import router
+from routes import openai
+from routes import gemini
 
 # FastAPI 앱 초기화
 app = FastAPI(
@@ -21,6 +23,8 @@ app.add_middleware(
 
 # 라우터 등록
 app.include_router(router)
+app.include_router(openai.router)
+app.include_router(gemini.router)
 
 
 @app.get("/")

@@ -1,126 +1,128 @@
 <script setup>
-import { ref, nextTick, watch } from 'vue'
-import { sendMessage } from '../services/grokApi'
+import { ref, nextTick, watch, defineProps, onMounted } from 'vue'
+import { useChat } from '../composables/useChat'
+import { useChatHistory } from '../composables/useChatHistory'
+import { useChatMarkdown } from '../composables/useChatMarkdown'
 
-const messages = ref([])
-const inputMessage = ref('')
-const isLoading = ref(false)
-const messagesContainer = ref(null)
+const props = defineProps({
+  apiPath: {
+    type: String,
+    default: '/api/grok/chat'
+  }
+})
+
+// Composables
+const { parseMarkdown } = useChatMarkdown()
+const { loadHistory, saveHistory, clearHistory } = useChatHistory(props.apiPath)
 
 const scrollToBottom = async () => {
   await nextTick()
-  if (messagesContainer.value) {
-    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+  if (chatState.messagesContainer.value) {
+    chatState.messagesContainer.value.scrollTop = chatState.messagesContainer.value.scrollHeight
   }
 }
 
-const handleSendMessage = async () => {
-  const message = inputMessage.value.trim()
-  if (!message) return
+const chatState = useChat(props.apiPath, () => saveHistory(chatState.messages), scrollToBottom)
 
-  
-  messages.value.push({
-    id: Date.now(),
-    text: message,
-    sender: 'user',
-    timestamp: new Date(),
-  })
-  inputMessage.value = ''
-  isLoading.value = true
-  await scrollToBottom()
-
-  try {
-    
-    const assistantMessageId = Date.now() + 1
-    messages.value.push({
-      id: assistantMessageId,
-      text: '',
-      sender: 'assistant',
-      timestamp: new Date(),
-    })
-    await scrollToBottom()
-
-    
-    await sendMessage(message, (chunk) => {
-      const assistantMsg = messages.value.find(msg => msg.id === assistantMessageId)
-      if (assistantMsg) {
-        assistantMsg.text += chunk
-      }
-    })
-    await scrollToBottom()
-  } catch (error) {
-    console.error('Error sending message:', error)
-    messages.value.push({
-      id: Date.now() + 2,
-      text: `Error: ${error.message || 'Failed to get response from server'}`,
-      sender: 'assistant',
-      timestamp: new Date(),
-    })
-  } finally {
-    isLoading.value = false
-    await scrollToBottom()
+// API 경로에 따른 제목 생성
+const getChatTitle = () => {
+  if (props.apiPath.includes('/openai/')) {
+    return 'Chat with GPT'
+  } else if (props.apiPath.includes('/gemini/')) {
+    return 'Chat with Gemini'
+  } else if (props.apiPath.includes('/grok/')) {
+    return 'Chat with Grok'
+  } else {
+    return 'Chat'
   }
 }
 
-const handleKeyDown = (e) => {
-  if (e.key === 'Enter' && !e.shiftKey && !isLoading.value) {
-    e.preventDefault()
-    handleSendMessage()
+// 로딩 메시지
+const getLoadingMessage = () => {
+  if (props.apiPath.includes('/openai/')) {
+    return 'GPT is thinking...'
+  } else if (props.apiPath.includes('/gemini/')) {
+    return 'Gemini is thinking...'
+  } else if (props.apiPath.includes('/grok/')) {
+    return 'Grok is thinking...'
+  } else {
+    return 'Thinking...'
   }
 }
 
-const clearChat = () => {
-  messages.value = []
-  inputMessage.value = ''
-}
+// apiPath 변경 감지 - 탭 전환 시 히스토리 초기화 및 재로드
+watch(() => props.apiPath, () => {
+  chatState.inputMessage.value = ''
+  chatState.messages.value = []
+  loadHistory(chatState.messages)
+})
 
-watch(messages, scrollToBottom)
+// 메시지 변경 시 자동 스크롤
+watch(chatState.messages, scrollToBottom)
+
+// 컴포넌트 마운트 시 히스토리 로드
+onMounted(() => {
+  loadHistory(chatState.messages)
+})
+
+const handleClearChat = () => {
+  clearHistory(chatState.messages)
+  chatState.inputMessage.value = ''
+}
 </script>
 
 <template>
   <div class="chat-window">
     <div class="chat-header">
-      <h2>Chat with Grok</h2>
-      <button class="clear-btn" @click="clearChat" :disabled="isLoading">
+      <h2>{{ getChatTitle() }}</h2>
+      <button class="clear-btn" @click="handleClearChat" :disabled="chatState.isLoading.value">
         Clear
       </button>
     </div>
 
-    <div class="messages-container" ref="messagesContainer">
-      <div v-if="messages.length === 0" class="empty-state">
+    <div class="messages-container" ref="chatState.messagesContainer">
+      <div v-if="chatState.messages.value.length === 0" class="empty-state">
         <p>No messages yet. Start a conversation!</p>
       </div>
 
-      <div v-for="msg in messages" :key="msg.id" :class="['message', msg.sender]">
+      <div v-for="msg in chatState.messages.value" :key="msg.id" :class="['message', msg.sender]">
         <div class="message-bubble">
-          <p>{{ msg.text }}</p>
+          <!-- 사용자 메시지는 일반 텍스트로 표시 -->
+          <p v-if="msg.sender === 'user'">{{ msg.text }}</p>
+
+          <!-- AI 응답은 마크다운으로 렌더링 -->
+          <div v-else class="markdown-content" v-html="parseMarkdown(msg.text)"></div>
+
           <span class="timestamp">{{
             msg.timestamp.toLocaleTimeString()
           }}</span>
         </div>
       </div>
 
-      <div v-if="isLoading" class="loading-indicator">
+      <div v-if="chatState.isLoading.value" class="loading-indicator">
         <div class="spinner"></div>
-        <span>Grok is thinking...</span>
+        <span>{{ getLoadingMessage() }}</span>
       </div>
     </div>
 
     <div class="input-area">
       <textarea
-        v-model="inputMessage"
+        :ref="(el) => { chatState.textareaRef.value = el }"
+        v-model="chatState.inputMessage.value"
         placeholder="Type your message here... (Shift+Enter for new line)"
         class="message-input"
-        :disabled="isLoading"
-        @keydown="handleKeyDown"
+        :disabled="chatState.isLoading.value"
+        @keydown="chatState.handleKeyDown"
+        @compositionstart="chatState.handleCompositionStart"
+        @compositionend="chatState.handleCompositionEnd"
         rows="3"
       ></textarea>
       <button
         class="send-btn"
-        @click="handleSendMessage"
-        :disabled="!inputMessage.trim() || isLoading"
+        @click="chatState.handleSendMessage"
+        :disabled="!chatState.inputMessage.value.trim() || chatState.isLoading.value"
       >
-        {{ isLoading ? 'Sending...' : 'Send' }}
+        {{ chatState.isLoading.value ? 'Sending...' : 'Send' }}
       </button>
     </div>
   </div>
@@ -130,8 +132,9 @@ watch(messages, scrollToBottom)
 .chat-window {
   display: flex;
   flex-direction: column;
+  margin: 0 auto;
+  width: 60%;
   height: 100%;
-  max-height: 600px;
   border: 1px solid #ddd;
   border-radius: 8px;
   background-color: #fff;
@@ -183,6 +186,7 @@ watch(messages, scrollToBottom)
   flex-direction: column;
   gap: 12px;
   background-color: #f9f9f9;
+  min-height: 300px;
 }
 
 .empty-state {
@@ -223,6 +227,106 @@ watch(messages, scrollToBottom)
 .message.assistant .message-bubble {
   background-color: #e9ecef;
   color: #000;
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4,
+.markdown-content h5,
+.markdown-content h6 {
+  margin: 12px 0 8px 0;
+  font-weight: 600;
+}
+
+.markdown-content h1 {
+  font-size: 20px;
+}
+
+.markdown-content h2 {
+  font-size: 18px;
+}
+
+.markdown-content h3 {
+  font-size: 16px;
+}
+
+.markdown-content h4 {
+  font-size: 15px;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.markdown-content li {
+  margin: 4px 0;
+  line-height: 1.5;
+}
+
+.markdown-content code {
+  background-color: rgba(0, 0, 0, 0.1);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 13px;
+}
+
+.markdown-content pre {
+  background-color: rgba(0, 0, 0, 0.15);
+  padding: 10px;
+  border-radius: 5px;
+  overflow-x: auto;
+  margin: 8px 0;
+  line-height: 1.4;
+}
+
+.markdown-content pre code {
+  background-color: transparent;
+  padding: 0;
+  font-size: 12px;
+}
+
+.markdown-content blockquote {
+  border-left: 4px solid rgba(0, 0, 0, 0.2);
+  margin: 8px 0;
+  padding: 8px 12px;
+  background-color: rgba(0, 0, 0, 0.05);
+  font-style: italic;
+}
+
+.markdown-content a {
+  color: #0056b3;
+  text-decoration: none;
+}
+
+.markdown-content a:hover {
+  text-decoration: underline;
+}
+
+.markdown-content table {
+  border-collapse: collapse;
+  margin: 8px 0;
+  width: 100%;
+}
+
+.markdown-content table td,
+.markdown-content table th {
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.markdown-content table th {
+  background-color: rgba(0, 0, 0, 0.1);
+  font-weight: 600;
+}
+
+.markdown-content p {
+  margin: 6px 0;
+  line-height: 1.6;
 }
 
 .timestamp {
@@ -282,6 +386,7 @@ watch(messages, scrollToBottom)
   font-size: 14px;
   resize: none;
   transition: border-color 0.3s;
+  overflow: scrollHeight;
 }
 
 .message-input:focus {

@@ -4,15 +4,15 @@ from config.settings import settings
 from services.prompts.grok_prompt import GROK_PROMPTS
 
 
-class GrokServicePrompt:
+class OpenAIServicePrompt:
     def __init__(self):
-        self.api_key = settings.grok_api_key
-        self.base_url = settings.grok_api_base_url
-        self.model = settings.grok_model
+        self.api_key = settings.openai_api_key
+        self.base_url = settings.openai_api_base_url
+        self.model = settings.openai_model
 
     async def chat(self, message: str, history: list = None, prompt_key: str = "prompt"):
         """
-        Grok API에 프롬프트를 포함하여 메시지를 보내고 스트림 형식으로 응답을 받습니다.
+        OpenAI API에 프롬프트를 포함하여 메시지를 보내고 스트림 형식으로 응답을 받습니다.
         """
         system_prompt = GROK_PROMPTS.get(prompt_key, GROK_PROMPTS.get("prompt", ""))
 
@@ -41,7 +41,7 @@ class GrokServicePrompt:
             ) as response:
                 if response.status_code != 200:
                     raise Exception(
-                        f"Grok API Error {response.status_code}: {await response.aread().decode()}"
+                        f"OpenAI API Error {response.status_code}: {await response.aread().decode()}"
                     )
 
                 async for line in response.aiter_lines():
@@ -58,6 +58,6 @@ class GrokServicePrompt:
                                     yield content
                         except json.JSONDecodeError:
                             continue
-    
 
-grok_service_prompt = GrokServicePrompt()
+
+openai_service_prompt = OpenAIServicePrompt()

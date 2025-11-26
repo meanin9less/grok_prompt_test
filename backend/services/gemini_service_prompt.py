@@ -1,26 +1,34 @@
 import httpx
 import json
 from config.settings import settings
+from services.prompts.grok_prompt import GROK_PROMPTS
 
 
-class GrokServiceBasic:
+class GeminiServicePrompt:
     def __init__(self):
-        self.api_key = settings.grok_api_key
-        self.base_url = settings.grok_api_base_url
-        self.model = settings.grok_model
+        self.api_key = settings.gemini_api_key
+        self.base_url = settings.gemini_api_base_url
+        self.model = settings.gemini_model
 
-    async def chat(self, message: str):
+    async def chat(self, message: str, history: list = None, prompt_key: str = "prompt"):
         """
-        Grok API에 메시지를 보내고 스트림 형식으로 응답을 받습니다.
+        Gemini API에 프롬프트를 포함하여 메시지를 보내고 스트림 형식으로 응답을 받습니다.
         """
+        system_prompt = GROK_PROMPTS.get(prompt_key, GROK_PROMPTS.get("prompt", ""))
+
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
 
+        messages = [{"role": "system", "content": system_prompt}]
+        if history:
+            messages.extend(history)
+        messages.append({"role": "user", "content": message})
+
         payload = {
             "model": self.model,
-            "messages": [{"role": "user", "content": message}],
+            "messages": messages,
             "stream": True,
         }
 
@@ -33,7 +41,7 @@ class GrokServiceBasic:
             ) as response:
                 if response.status_code != 200:
                     raise Exception(
-                        f"Grok API Error {response.status_code}: {await response.aread().decode()}"
+                        f"Gemini API Error {response.status_code}: {await response.aread().decode()}"
                     )
 
                 async for line in response.aiter_lines():
@@ -52,4 +60,4 @@ class GrokServiceBasic:
                             continue
 
 
-grok_service_basic = GrokServiceBasic()
+gemini_service_prompt = GeminiServicePrompt()

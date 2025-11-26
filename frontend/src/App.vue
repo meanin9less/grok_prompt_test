@@ -13,28 +13,21 @@ const route = useRoute()
           class="tab"
           :class="{ active: route.path === '/' }"
         >
-          BasicGrok
-        </router-link>
-        <router-link
-          to="/about"
-          class="tab"
-          :class="{ active: route.path === '/about' }"
-        >
           PromptGrok
         </router-link>
         <router-link
-          to="/contact"
+          to="/prompt-gpt"
           class="tab"
-          :class="{ active: route.path === '/contact' }"
+          :class="{ active: route.path === '/prompt-gpt' }"
         >
           PromptGpt
         </router-link>
         <router-link
-          to="/promptlikegpt"
+          to="/prompt-gemini"
           class="tab"
-          :class="{ active: route.path === '/promptlikegpt' }"
+          :class="{ active: route.path === '/prompt-gemini' }"
         >
-          PromptLikeGpt
+          PromptGemini
         </router-link>
       </nav>
     </header>
@@ -46,8 +39,14 @@ const route = useRoute()
 
 <style scoped>
 
+#app{
+  padding: 0 50px;
+}
+
 .header {
+  width: 80%;
   padding: 0;
+  margin: 0 auto;
 }
 
 .nav {
@@ -64,6 +63,7 @@ const route = useRoute()
   cursor: pointer;
   border-bottom: 3px solid transparent;
   transition: all 0.3s ease;
+  border: 1px solid #000;
 }
 
 .tab:hover {
@@ -72,11 +72,12 @@ const route = useRoute()
 
 .tab.active {
   background-color: #007bff;
-  border-bottom-color: #007bff;
 }
 
 .content {
   flex: 1;
   overflow-y: auto;
+  width: 80%;
+  margin: 0 auto;
 }
 </style>

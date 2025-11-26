@@ -1,12 +1,12 @@
 const BACKEND_URL = 'http://localhost:8000'
 
-export async function sendMessage(message, onChunk) {
-  const response = await fetch(`${BACKEND_URL}/api/grok/chat`, {
+export async function sendMessage(message, onChunk, apiPath = '/api/grok/chat', history = []) {
+  const response = await fetch(`${BACKEND_URL}${apiPath}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, history }),
   })
 
   if (!response.ok) {

@@ -6,7 +6,7 @@ import ChatWindow from '../components/ChatWindow.vue'
   <div class="page">
     <h1>Prompt GPT</h1>
     <p>Chat with GPT using prompts</p>
-    <ChatWindow />
+    <ChatWindow api-path="/api/openai/prompt-chat" />
   </div>
 </template>
 
