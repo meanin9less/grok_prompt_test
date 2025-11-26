@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { getPromptsList, getPromptContent } from '../services/promptService'
 
 defineProps({
@@ -16,6 +16,8 @@ const isLoading = ref(false)
 const error = ref(null)
 const selectedPromptContent = ref('')
 const loadingContent = ref(false)
+const showModal = ref(false)
+const previewPromptKey = ref(null)
 
 onMounted(async () => {
   isLoading.value = true
@@ -43,9 +45,21 @@ const loadPromptContent = async (promptKey) => {
   }
 }
 
-const handleSelectPrompt = async (promptKey) => {
-  emit('select-prompt', promptKey)
+const handlePreviewPrompt = async (promptKey) => {
+  previewPromptKey.value = promptKey
+  showModal.value = true
   await loadPromptContent(promptKey)
+}
+
+const handleApply = () => {
+  emit('select-prompt', previewPromptKey.value)
+  closeModal()
+}
+
+const closeModal = () => {
+  showModal.value = false
+  previewPromptKey.value = null
+  selectedPromptContent.value = ''
 }
 </script>
 
@@ -74,27 +88,35 @@ const handleSelectPrompt = async (promptKey) => {
           v-for="prompt in prompts"
           :key="prompt"
           :class="['prompt-item', { active: selectedPrompt === prompt }]"
-          @click="handleSelectPrompt(prompt)"
+          @click="handlePreviewPrompt(prompt)"
         >
           <span class="prompt-name">{{ prompt }}</span>
         </button>
       </div>
+    </div>
+  </div>
 
-      <div class="content-divider"></div>
+  <!-- Modal Popup -->
+  <div v-if="showModal" class="modal-overlay" @click="closeModal">
+    <div class="modal-content" @click.stop>
+      <div class="modal-header">
+        <h3>📝 {{ previewPromptKey }}</h3>
+        <button class="close-btn" @click="closeModal">✕</button>
+      </div>
 
-      <div class="prompt-content-section">
-        <div class="content-header">
-          <h4>📝 Content</h4>
-        </div>
-
+      <div class="modal-body">
         <div v-if="loadingContent" class="loading-content">
           <div class="spinner-small"></div>
           <p>Loading...</p>
         </div>
-
-        <div v-else class="prompt-content">
-          {{ selectedPromptContent || 'Select a prompt to view its content' }}
+        <div v-else class="prompt-content-text">
+          {{ selectedPromptContent }}
         </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="cancel-btn" @click="closeModal">Cancel</button>
+        <button class="apply-btn" @click="handleApply">Apply</button>
       </div>
     </div>
   </div>
@@ -132,7 +154,7 @@ const handleSelectPrompt = async (promptKey) => {
 }
 
 .prompts-list {
-  max-height: 40%;
+  flex: 1;
   overflow-y: auto;
   padding: 8px;
   display: flex;
@@ -220,39 +242,78 @@ const handleSelectPrompt = async (promptKey) => {
   background: #999;
 }
 
-.content-divider {
-  height: 1px;
-  background-color: #ddd;
-  margin: 0;
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
 }
 
-.prompt-content-section {
-  flex: 1;
+.modal-content {
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  width: 90%;
+  max-width: 600px;
+  max-height: 80vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background-color: #fff;
 }
 
-.content-header {
-  padding: 12px 16px;
+.modal-header {
+  padding: 20px;
   border-bottom: 1px solid #ddd;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   background-color: #f9f9f9;
 }
 
-.content-header h4 {
+.modal-header h3 {
   margin: 0;
-  font-size: 14px;
+  font-size: 18px;
   color: #333;
   font-weight: 600;
 }
 
-.prompt-content {
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #999;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.close-btn:hover {
+  color: #333;
+  background-color: #e9ecef;
+}
+
+.modal-body {
   flex: 1;
-  padding: 12px 16px;
   overflow-y: auto;
-  font-size: 12px;
-  line-height: 1.6;
+  padding: 20px;
+}
+
+.prompt-content-text {
+  font-size: 13px;
+  line-height: 1.8;
   color: #555;
   white-space: pre-wrap;
   word-break: break-word;
@@ -270,28 +331,66 @@ const handleSelectPrompt = async (promptKey) => {
 }
 
 .spinner-small {
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
   border: 2px solid #ddd;
   border-top-color: #007bff;
   border-radius: 50%;
   animation: spin 0.6s linear infinite;
 }
 
-.prompt-content::-webkit-scrollbar {
+.modal-footer {
+  padding: 16px 20px;
+  border-top: 1px solid #ddd;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  background-color: #f9f9f9;
+}
+
+.cancel-btn,
+.apply-btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.cancel-btn {
+  background-color: #e9ecef;
+  color: #333;
+}
+
+.cancel-btn:hover {
+  background-color: #dee2e6;
+}
+
+.apply-btn {
+  background-color: #007bff;
+  color: white;
+}
+
+.apply-btn:hover {
+  background-color: #0056b3;
+}
+
+.modal-body::-webkit-scrollbar {
   width: 6px;
 }
 
-.prompt-content::-webkit-scrollbar-track {
+.modal-body::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.prompt-content::-webkit-scrollbar-thumb {
+.modal-body::-webkit-scrollbar-thumb {
   background: #ccc;
   border-radius: 3px;
 }
 
-.prompt-content::-webkit-scrollbar-thumb:hover {
+.modal-body::-webkit-scrollbar-thumb:hover {
   background: #999;
 }
 </style>
