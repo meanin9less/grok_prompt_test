@@ -87,15 +87,43 @@ const handleClearChat = () => {
   clearHistory(chatState.messages)
   chatState.inputMessage.value = ''
 }
+
+// 모델 목록
+const getModelList = () => {
+  if (props.apiPath.includes('/openai/')) {
+    return ['gpt-5.1', 'gpt-5-mini', 'gpt-5-nano', 'gpt-5-pro', 'gpt-4.1-mini', 'gpt-4.1', 'gpt-4.1-nano', 'gpt-4o']
+  } else if (props.apiPath.includes('/gemini/')) {
+    return ['gemini-3-pro-preview', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.0-flash-lite']
+  } else if (props.apiPath.includes('/grok/')) {
+    return ['grok-4-1-fast-reasoning', 'grok-4-1-fast-non-reasoning', 'grok-code-fast-1', 'grok-4-fast-reasoning', 'grok-4-fast-non-reasoning', 'grok-4-0709', 'grok-3-mini', 'grok-3']
+  }
+  return []
+}
+
+const handleModelChange = (event) => {
+  chatState.selectedModel.value = event.target.value
+}
 </script>
 
 <template>
   <div class="chat-window">
     <div class="chat-header">
       <h2>{{ getChatTitle() }}</h2>
-      <button class="clear-btn" @click="handleClearChat" :disabled="chatState.isLoading.value">
-        Clear
-      </button>
+      <div class="header-controls">
+        <select
+          :value="chatState.selectedModel.value || ''"
+          @change="handleModelChange"
+          class="model-select"
+        >
+          <option value="">Default Model</option>
+          <option v-for="model in getModelList()" :key="model" :value="model">
+            {{ model }}
+          </option>
+        </select>
+        <button class="clear-btn" @click="handleClearChat" :disabled="chatState.isLoading.value">
+          Clear
+        </button>
+      </div>
     </div>
 
     <div class="messages-container" ref="chatState.messagesContainer">
@@ -153,7 +181,9 @@ const handleClearChat = () => {
   flex: 1;
   height: 100%;
   background-color: #fff;
-  border-left: 1px solid #ddd;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   overflow: hidden;
 }
 
@@ -171,6 +201,32 @@ const handleClearChat = () => {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.model-select {
+  padding: 6px 10px;
+  background-color: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background-color 0.3s;
+}
+
+.model-select option {
+  background-color: #fff;
+  color: #333;
+}
+
+.model-select:hover {
+  background-color: rgba(255, 255, 255, 0.3);
 }
 
 .clear-btn {
