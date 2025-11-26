@@ -4,6 +4,7 @@ from config import settings
 from routes import router
 from routes import openai
 from routes import gemini
+from routes import prompts
 
 # FastAPI 앱 초기화
 app = FastAPI(
@@ -25,6 +26,7 @@ app.add_middleware(
 app.include_router(router)
 app.include_router(openai.router)
 app.include_router(gemini.router)
+app.include_router(prompts.router)
 
 
 @app.get("/")

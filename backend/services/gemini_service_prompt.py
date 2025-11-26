@@ -1,7 +1,7 @@
 import httpx
 import json
 from config.settings import settings
-from services.prompts.grok_prompt import GROK_PROMPTS
+from services.prompts.gemini_prompt import GEMINI_PROMPTS
 
 
 class GeminiServicePrompt:
@@ -14,7 +14,7 @@ class GeminiServicePrompt:
         """
         Gemini API에 프롬프트를 포함하여 메시지를 보내고 스트림 형식으로 응답을 받습니다.
         """
-        system_prompt = GROK_PROMPTS.get(prompt_key, GROK_PROMPTS.get("prompt", ""))
+        system_prompt = GEMINI_PROMPTS.get(prompt_key, GEMINI_PROMPTS.get("prompt", ""))
 
         headers = {
             "Authorization": f"Bearer {self.api_key}",
