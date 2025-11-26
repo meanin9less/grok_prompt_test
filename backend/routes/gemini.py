@@ -17,6 +17,7 @@ class ChatRequest(BaseModel):
     message: str
     history: List[Message] = []
     model: Optional[str] = None
+    prompt_key: Optional[str] = "prompt"
 
 
 class ChatResponse(BaseModel):
@@ -39,7 +40,7 @@ async def prompt_chat(request: ChatRequest):
     try:
         async def generate():
             history = [{"role": msg.role, "content": msg.content} for msg in request.history]
-            async for chunk in gemini_service_prompt.chat(request.message, history, prompt_key="prompt", model=request.model):
+            async for chunk in gemini_service_prompt.chat(request.message, history, prompt_key=request.prompt_key, model=request.model):
                 yield chunk
 
         return StreamingResponse(generate(), media_type="text/event-stream")

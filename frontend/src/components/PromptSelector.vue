@@ -1,6 +1,6 @@
 <script setup>
-import { ref, onMounted } from 'vue'
-import { getPromptsList } from '../services/grokApi'
+import { ref, onMounted, computed } from 'vue'
+import { getPromptsList, getPromptContent } from '../services/promptService'
 
 defineProps({
   selectedPrompt: {
@@ -14,6 +14,8 @@ const emit = defineEmits(['select-prompt'])
 const prompts = ref([])
 const isLoading = ref(false)
 const error = ref(null)
+const selectedPromptContent = ref('')
+const loadingContent = ref(false)
 
 onMounted(async () => {
   isLoading.value = true
@@ -28,8 +30,22 @@ onMounted(async () => {
   }
 })
 
-const handleSelectPrompt = (promptKey) => {
+const loadPromptContent = async (promptKey) => {
+  loadingContent.value = true
+  try {
+    const data = await getPromptContent(promptKey)
+    selectedPromptContent.value = data.content || ''
+  } catch (err) {
+    console.error('Error loading prompt content:', err)
+    selectedPromptContent.value = 'Failed to load prompt content'
+  } finally {
+    loadingContent.value = false
+  }
+}
+
+const handleSelectPrompt = async (promptKey) => {
   emit('select-prompt', promptKey)
+  await loadPromptContent(promptKey)
 }
 </script>
 
@@ -52,15 +68,34 @@ const handleSelectPrompt = (promptKey) => {
       <p>No prompts available</p>
     </div>
 
-    <div v-else class="prompts-list">
-      <button
-        v-for="prompt in prompts"
-        :key="prompt"
-        :class="['prompt-item', { active: selectedPrompt === prompt }]"
-        @click="handleSelectPrompt(prompt)"
-      >
-        <span class="prompt-name">{{ prompt }}</span>
-      </button>
+    <div v-else class="content">
+      <div class="prompts-list">
+        <button
+          v-for="prompt in prompts"
+          :key="prompt"
+          :class="['prompt-item', { active: selectedPrompt === prompt }]"
+          @click="handleSelectPrompt(prompt)"
+        >
+          <span class="prompt-name">{{ prompt }}</span>
+        </button>
+      </div>
+
+      <div class="content-divider"></div>
+
+      <div class="prompt-content-section">
+        <div class="content-header">
+          <h4>📝 Content</h4>
+        </div>
+
+        <div v-if="loadingContent" class="loading-content">
+          <div class="spinner-small"></div>
+          <p>Loading...</p>
+        </div>
+
+        <div v-else class="prompt-content">
+          {{ selectedPromptContent || 'Select a prompt to view its content' }}
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -69,7 +104,7 @@ const handleSelectPrompt = (promptKey) => {
 .prompt-selector {
   display: flex;
   flex-direction: column;
-  width: 250px;
+  width: 350px;
   background-color: #f5f5f5;
   border-right: 1px solid #ddd;
   height: 100%;
@@ -89,8 +124,15 @@ const handleSelectPrompt = (promptKey) => {
   font-weight: 600;
 }
 
-.prompts-list {
+.content {
+  display: flex;
+  flex-direction: column;
   flex: 1;
+  overflow: hidden;
+}
+
+.prompts-list {
+  max-height: 40%;
   overflow-y: auto;
   padding: 8px;
   display: flex;
@@ -175,6 +217,81 @@ const handleSelectPrompt = (promptKey) => {
 }
 
 .prompts-list::-webkit-scrollbar-thumb:hover {
+  background: #999;
+}
+
+.content-divider {
+  height: 1px;
+  background-color: #ddd;
+  margin: 0;
+}
+
+.prompt-content-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: #fff;
+}
+
+.content-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid #ddd;
+  background-color: #f9f9f9;
+}
+
+.content-header h4 {
+  margin: 0;
+  font-size: 14px;
+  color: #333;
+  font-weight: 600;
+}
+
+.prompt-content {
+  flex: 1;
+  padding: 12px 16px;
+  overflow-y: auto;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #555;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 8px;
+  color: #999;
+  font-size: 12px;
+}
+
+.spinner-small {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #ddd;
+  border-top-color: #007bff;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+.prompt-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.prompt-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.prompt-content::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 3px;
+}
+
+.prompt-content::-webkit-scrollbar-thumb:hover {
   background: #999;
 }
 </style>

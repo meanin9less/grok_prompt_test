@@ -12,6 +12,10 @@ const props = defineProps({
   selectedModel: {
     type: String,
     default: null
+  },
+  selectedPrompt: {
+    type: String,
+    default: 'prompt'
   }
 })
 
@@ -26,11 +30,16 @@ const scrollToBottom = async () => {
   }
 }
 
-const chatState = useChat(props.apiPath, () => saveHistory(chatState.messages), scrollToBottom, props.selectedModel)
+const chatState = useChat(props.apiPath, () => saveHistory(chatState.messages), scrollToBottom, props.selectedModel, props.selectedPrompt)
 
 // selectedModel 변경 감지
 watch(() => props.selectedModel, (newModel) => {
   chatState.selectedModel.value = newModel
+})
+
+// selectedPrompt 변경 감지
+watch(() => props.selectedPrompt, (newPrompt) => {
+  chatState.selectedPrompt.value = newPrompt
 })
 
 // API 경로에 따른 제목 생성
@@ -141,13 +150,10 @@ const handleClearChat = () => {
 .chat-window {
   display: flex;
   flex-direction: column;
-  margin: 0 auto;
-  width: 60%;
+  flex: 1;
   height: 100%;
-  border: 1px solid #ddd;
-  border-radius: 8px;
   background-color: #fff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-left: 1px solid #ddd;
   overflow: hidden;
 }
 

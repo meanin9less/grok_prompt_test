@@ -1,11 +1,14 @@
 const BACKEND_URL = 'http://localhost:8000'
 
-export async function sendMessage(message, onChunk, apiPath = '/api/grok/chat', history = [], model = null) {
+export async function sendMessage(message, onChunk, apiPath = '/api/grok/chat', history = [], model = null, promptKey = 'prompt') {
   const body = { message, history }
   if (model) {
     body.model = model
   }
-  console.log('Sending message with model:', model || 'default', 'Body:', body)
+  if (promptKey) {
+    body.prompt_key = promptKey
+  }
+  console.log('Sending message with model:', model || 'default', 'prompt_key:', promptKey, 'Body:', body)
 
   const response = await fetch(`${BACKEND_URL}${apiPath}`, {
     method: 'POST',
@@ -34,17 +37,6 @@ export async function sendMessage(message, onChunk, apiPath = '/api/grok/chat', 
     }
   } finally {
     reader.releaseLock()
-  }
-}
-
-export async function getPromptsList() {
-  try {
-    const response = await fetch(`${BACKEND_URL}/api/prompts/list`)
-    if (!response.ok) throw new Error('Failed to fetch prompts list')
-    return await response.json()
-  } catch (error) {
-    console.error('Error fetching prompts list:', error)
-    return { prompts: [], total: 0 }
   }
 }
 

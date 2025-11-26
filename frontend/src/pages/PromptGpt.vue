@@ -1,38 +1,57 @@
 <script setup>
 import { ref } from 'vue'
 import ChatWindow from '../components/ChatWindow.vue'
+import PromptSelector from '../components/PromptSelector.vue'
 
 const selectedModel = ref(null)
+const selectedPrompt = ref('prompt')
 
 const gptModels = ['gpt-5.1', 'gpt-5-mini', 'gpt-5-nano', 'gpt-5-pro', 'gpt-4.1-mini', 'gpt-4.1', 'gpt-4.1-nano', 'gpt-4o']
 </script>
 
 <template>
   <div class="page">
-    <h1>Prompt GPT</h1>
-    <p>Chat with GPT using prompts</p>
+    <div class="header">
+      <h1>Prompt GPT</h1>
+      <p>Chat with GPT using prompts</p>
 
-    <div class="model-selector">
-      <label for="gpt-model">Select Model:</label>
-      <select id="gpt-model" v-model="selectedModel">
-        <option value="">Default Model</option>
-        <option v-for="model in gptModels" :key="model" :value="model">
-          {{ model }}
-        </option>
-      </select>
+      <div class="model-selector">
+        <label for="gpt-model">Select Model:</label>
+        <select id="gpt-model" v-model="selectedModel">
+          <option value="">Default Model</option>
+          <option v-for="model in gptModels" :key="model" :value="model">
+            {{ model }}
+          </option>
+        </select>
+      </div>
     </div>
 
-    <ChatWindow api-path="/api/openai/prompt-chat" :selected-model="selectedModel" />
+    <div class="content">
+      <PromptSelector
+        :selected-prompt="selectedPrompt"
+        @select-prompt="selectedPrompt = $event"
+      />
+      <ChatWindow
+        api-path="/api/openai/prompt-chat"
+        :selected-model="selectedModel"
+        :selected-prompt="selectedPrompt"
+      />
+    </div>
   </div>
 </template>
 
 <style scoped>
 .page {
-  padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
   height: 100%;
+  gap: 0;
+}
+
+.header {
+  padding: 20px;
+  border-bottom: 1px solid #ddd;
+  background-color: #fff;
 }
 
 h1 {
@@ -50,7 +69,6 @@ p {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 20px;
 }
 
 .model-selector label {
@@ -72,5 +90,12 @@ p {
   outline: none;
   border-color: #007bff;
   box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.1);
+}
+
+.content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  gap: 0;
 }
 </style>
