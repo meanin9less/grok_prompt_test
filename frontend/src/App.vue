@@ -45,7 +45,6 @@ const route = useRoute()
 #app {
   display: flex;
   flex-direction: column;
-  height: 100vh;
   background-color: #fff;
 }
 
@@ -107,6 +106,6 @@ const route = useRoute()
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  padding: 16px;
+  padding: 0 40px;
 }
 </style>
