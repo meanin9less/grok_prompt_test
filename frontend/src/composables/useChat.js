@@ -1,7 +1,7 @@
 import { ref, nextTick } from 'vue'
 import { sendMessage } from '../services/grokApi'
 
-export function useChat(apiPath, saveHistoryCallback, scrollToBottomCallback, selectedModel = null, selectedPrompt = 'prompt') {
+export function useChat(apiPathSource, saveHistoryCallback, scrollToBottomCallback, selectedModel = null, selectedPrompt = 'prompt') {
   const messages = ref([])
   const inputMessage = ref('')
   const isLoading = ref(false)
@@ -10,6 +10,12 @@ export function useChat(apiPath, saveHistoryCallback, scrollToBottomCallback, se
   const isComposing = ref(false)
   const selectedModel_ = ref(selectedModel)
   const selectedPrompt_ = ref(selectedPrompt)
+
+  const resolveApiPath = () => {
+    if (typeof apiPathSource === 'function') return apiPathSource()
+    if (apiPathSource && typeof apiPathSource === 'object' && 'value' in apiPathSource) return apiPathSource.value
+    return apiPathSource
+  }
 
   const handleCompositionStart = () => {
     isComposing.value = true
@@ -36,12 +42,14 @@ export function useChat(apiPath, saveHistoryCallback, scrollToBottomCallback, se
     saveHistoryCallback()
 
     try {
+      const startTime = Date.now()
       const assistantMessageId = Date.now() + 1
       const assistantMessage = {
         id: assistantMessageId,
         text: '',
         sender: 'assistant',
-        timestamp: new Date()
+        timestamp: new Date(),
+        responseTime: 0 // 응답시간 저장
       }
       messages.value.push(assistantMessage)
       await scrollToBottomCallback()
@@ -60,7 +68,14 @@ export function useChat(apiPath, saveHistoryCallback, scrollToBottomCallback, se
         if (assistantMsg) {
           assistantMsg.text += chunk
         }
-      }, apiPath, history, selectedModel_.value, selectedPrompt_.value)
+      }, resolveApiPath(), history, selectedModel_.value, selectedPrompt_.value)
+
+      // 응답시간 기록
+      const endTime = Date.now()
+      const assistantMsg = messages.value.find(msg => msg.id === assistantMessageId)
+      if (assistantMsg) {
+        assistantMsg.responseTime = endTime - startTime
+      }
 
       saveHistoryCallback()
       await scrollToBottomCallback()
@@ -70,7 +85,8 @@ export function useChat(apiPath, saveHistoryCallback, scrollToBottomCallback, se
         id: Date.now() + 2,
         text: `Error: ${error.message || 'Failed to get response from server'}`,
         sender: 'assistant',
-        timestamp: new Date()
+        timestamp: new Date(),
+        responseTime: 0
       })
       saveHistoryCallback()
     } finally {
