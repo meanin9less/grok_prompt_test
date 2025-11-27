@@ -3,10 +3,13 @@ import { ref, provide } from 'vue'
 import ChatWindow from '../components/ChatWindow.vue'
 import PromptSelector from '../components/PromptSelector.vue'
 import { useCustomForms } from '../composables/useCustomForms'
+import { useRouter } from 'vue-router'
 
+const router = useRouter()
 const selectedPrompt = ref('prompt')
 const selectedFormId = ref(null)
 const chatWindowRef = ref(null)
+const currentApiPath = ref('/api/gemini/prompt-chat')
 
 // 공유 폼 인스턴스 제공
 const customFormsInstance = useCustomForms()
@@ -14,6 +17,17 @@ provide('customForms', customFormsInstance)
 
 const handleSelectForm = (formId) => {
   selectedFormId.value = formId
+}
+
+const handleChangeApi = (apiPath) => {
+  // API 경로에 따라 페이지 이동
+  if (apiPath.includes('/gemini/')) {
+    currentApiPath.value = apiPath
+  } else if (apiPath.includes('/openai/')) {
+    router.push('/prompt-gpt')
+  } else if (apiPath.includes('/grok/')) {
+    router.push('/prompt-grok')
+  }
 }
 
 const handleClearForm = () => {
@@ -39,10 +53,11 @@ const handleFormDeleted = (formId) => {
     <div class="content">
       <ChatWindow
         ref="chatWindowRef"
-        api-path="/api/gemini/prompt-chat"
+        :api-path="currentApiPath"
         :selected-prompt="selectedPrompt"
         :selected-form-id="selectedFormId"
         @clear-form="handleClearForm"
+        @change-api="handleChangeApi"
       />
       <PromptSelector
         :selected-prompt="selectedPrompt"

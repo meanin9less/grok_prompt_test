@@ -22,8 +22,8 @@
 
 .chat-header {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  gap: 12px;
   padding: 16px;
   background-color: #007bff;
   color: white;
@@ -692,4 +692,41 @@
 
 .btn-add-field-bottom:hover {
   background-color: #0056b3;
+}
+
+/* API 탭 스타일 */
+.header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.api-tabs {
+  display: flex;
+  gap: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  padding-top: 12px;
+}
+
+.api-tab {
+  flex: 1;
+  padding: 8px 12px;
+  background-color: rgba(255, 255, 255, 0.1);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.2s;
+  border-bottom: 2px solid transparent;
+}
+
+.api-tab:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
+.api-tab.active {
+  background-color: rgba(255, 255, 255, 0.25);
+  border-bottom-color: white;
 }

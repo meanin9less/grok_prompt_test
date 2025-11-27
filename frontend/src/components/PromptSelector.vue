@@ -23,7 +23,7 @@ const customFormsInstance = props.customForms || useCustomForms()
 const { forms, getForm, getFormInputs } = customFormsInstance
 const { prompts, createPrompt, deletePrompt, updatePrompt, getPrompt } = useSavedPrompts()
 
-const activeTab = ref('system')
+const activeTab = ref('custom')
 const selectedFormId = ref(null)
 const showFormInput = ref(false)
 const showPromptModal = ref(false)
@@ -281,7 +281,7 @@ const closeCreatePromptModal = () => {
 }
 
 .tabs-container {
-  display: flex;
+  display: none;
   gap: 0;
   background-color: #fff;
   border-bottom: 1px solid #ddd;

@@ -24,7 +24,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['clear-form'])
+const emit = defineEmits(['clear-form', 'change-api'])
 
 // Composables
 const { parseMarkdown } = useChatMarkdown()
@@ -239,19 +239,43 @@ defineExpose({
 <template>
   <div class="chat-window">
     <div class="chat-header">
-      <h2>{{ getChatTitle() }}</h2>
-      <div class="header-controls">
-        <select
-          :value="chatState.selectedModel.value || getModelList()[0] || ''"
-          @change="handleModelChange"
-          class="model-select"
+      <div class="header-top">
+        <h2>{{ getChatTitle() }}</h2>
+        <div class="header-controls">
+          <select
+            :value="chatState.selectedModel.value || getModelList()[0] || ''"
+            @change="handleModelChange"
+            class="model-select"
+          >
+            <option v-for="model in getModelList()" :key="model" :value="model">
+              {{ model }}
+            </option>
+          </select>
+          <button class="clear-btn" @click="handleClearChat" :disabled="chatState.isLoading.value">
+            Clear
+          </button>
+        </div>
+      </div>
+
+      <!-- API 선택 탭 -->
+      <div class="api-tabs">
+        <button
+          :class="['api-tab', { active: props.apiPath === '/api/grok/prompt-chat' }]"
+          @click="$emit('change-api', '/api/grok/prompt-chat')"
         >
-          <option v-for="model in getModelList()" :key="model" :value="model">
-            {{ model }}
-          </option>
-        </select>
-        <button class="clear-btn" @click="handleClearChat" :disabled="chatState.isLoading.value">
-          Clear
+          Grok
+        </button>
+        <button
+          :class="['api-tab', { active: props.apiPath === '/api/openai/prompt-chat' }]"
+          @click="$emit('change-api', '/api/openai/prompt-chat')"
+        >
+          GPT
+        </button>
+        <button
+          :class="['api-tab', { active: props.apiPath === '/api/gemini/prompt-chat' }]"
+          @click="$emit('change-api', '/api/gemini/prompt-chat')"
+        >
+          Gemini
         </button>
       </div>
     </div>
