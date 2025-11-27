@@ -18,6 +18,8 @@ const selectedPromptContent = ref('')
 const loadingContent = ref(false)
 const showModal = ref(false)
 const previewPromptKey = ref(null)
+const isEditMode = ref(false)
+const editedContent = ref('')
 
 onMounted(async () => {
   isLoading.value = true
@@ -48,6 +50,7 @@ const loadPromptContent = async (promptKey) => {
 const handlePreviewPrompt = async (promptKey) => {
   previewPromptKey.value = promptKey
   showModal.value = true
+  isEditMode.value = false
   await loadPromptContent(promptKey)
 }
 
@@ -56,10 +59,70 @@ const handleApply = () => {
   closeModal()
 }
 
+const handleStartEdit = () => {
+  isEditMode.value = true
+  editedContent.value = selectedPromptContent.value
+}
+
+const handleSaveEdit = async () => {
+  try {
+    const response = await fetch(`http://localhost:8000/api/prompts/${previewPromptKey.value}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        content: editedContent.value
+      })
+    })
+
+    if (response.ok) {
+      selectedPromptContent.value = editedContent.value
+      isEditMode.value = false
+      alert('프롬프트가 수정되었습니다.')
+    } else {
+      alert('프롬프트 수정에 실패했습니다.')
+    }
+  } catch (err) {
+    console.error('Error saving prompt:', err)
+    alert('프롬프트 수정 중 오류가 발생했습니다.')
+  }
+}
+
+const handleCancelEdit = () => {
+  isEditMode.value = false
+  editedContent.value = ''
+}
+
+const handleDeletePrompt = async () => {
+  if (!confirm(`'${previewPromptKey.value}' 프롬프트를 삭제하시겠습니까?`)) {
+    return
+  }
+
+  try {
+    const response = await fetch(`http://localhost:8000/api/prompts/${previewPromptKey.value}`, {
+      method: 'DELETE'
+    })
+
+    if (response.ok) {
+      prompts.value = prompts.value.filter(p => p !== previewPromptKey.value)
+      closeModal()
+      alert('프롬프트가 삭제되었습니다.')
+    } else {
+      alert('프롬프트 삭제에 실패했습니다.')
+    }
+  } catch (err) {
+    console.error('Error deleting prompt:', err)
+    alert('프롬프트 삭제 중 오류가 발생했습니다.')
+  }
+}
+
 const closeModal = () => {
   showModal.value = false
   previewPromptKey.value = null
   selectedPromptContent.value = ''
+  isEditMode.value = false
+  editedContent.value = ''
 }
 </script>
 
@@ -105,14 +168,67 @@ const closeModal = () => {
           <div class="spinner-small"></div>
           <p>Loading...</p>
         </div>
+        <div v-else-if="isEditMode" class="prompt-edit-area">
+          <textarea
+            v-model="editedContent"
+            class="edit-textarea"
+            placeholder="프롬프트 내용을 입력하세요"
+          ></textarea>
+        </div>
         <div v-else class="prompt-content-text">
           {{ selectedPromptContent }}
         </div>
       </div>
 
       <div class="modal-footer">
-        <button class="cancel-btn" @click="closeModal">Cancel</button>
-        <button class="apply-btn" @click="handleApply">Apply</button>
+        <div class="footer-left">
+          <button
+            v-if="!isEditMode"
+            class="btn-delete"
+            @click="handleDeletePrompt"
+            title="프롬프트 삭제"
+          >
+            🗑️ Delete
+          </button>
+        </div>
+        <div class="footer-right">
+          <button
+            v-if="isEditMode"
+            class="cancel-btn"
+            @click="handleCancelEdit"
+          >
+            Cancel
+          </button>
+          <button
+            v-else
+            class="cancel-btn"
+            @click="closeModal"
+          >
+            Close
+          </button>
+          <button
+            v-if="isEditMode"
+            class="apply-btn"
+            @click="handleSaveEdit"
+          >
+            Save
+          </button>
+          <button
+            v-else-if="!isEditMode"
+            class="edit-btn"
+            @click="handleStartEdit"
+            title="프롬프트 수정"
+          >
+            ✏️ Edit
+          </button>
+          <button
+            v-else
+            class="apply-btn"
+            @click="handleApply"
+          >
+            Apply
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -319,17 +435,54 @@ const closeModal = () => {
   animation: spin 0.6s linear infinite;
 }
 
+.prompt-edit-area {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+}
+
+.edit-textarea {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 13px;
+  resize: none;
+  transition: border-color 0.2s;
+}
+
+.edit-textarea:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.1);
+}
+
 .modal-footer {
   padding: 16px 20px;
   border-top: 1px solid #ddd;
   display: flex;
+  justify-content: space-between;
+  align-items: center;
   gap: 12px;
-  justify-content: flex-end;
   background-color: #f9f9f9;
 }
 
+.footer-left {
+  display: flex;
+  gap: 8px;
+}
+
+.footer-right {
+  display: flex;
+  gap: 8px;
+}
+
 .cancel-btn,
-.apply-btn {
+.apply-btn,
+.edit-btn,
+.btn-delete {
   padding: 10px 20px;
   border: none;
   border-radius: 4px;
@@ -355,6 +508,24 @@ const closeModal = () => {
 
 .apply-btn:hover {
   background-color: #0056b3;
+}
+
+.edit-btn {
+  background-color: #17a2b8;
+  color: white;
+}
+
+.edit-btn:hover {
+  background-color: #138496;
+}
+
+.btn-delete {
+  background-color: #dc3545;
+  color: white;
+}
+
+.btn-delete:hover {
+  background-color: #c82333;
 }
 
 .modal-body::-webkit-scrollbar {

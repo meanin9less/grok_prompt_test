@@ -1,8 +1,9 @@
 <script setup>
-import { ref, nextTick, watch, defineProps, onMounted } from 'vue'
+import { ref, nextTick, watch, defineProps, defineEmits, onMounted, computed, inject } from 'vue'
 import { useChat } from '../composables/useChat'
 import { useChatHistory } from '../composables/useChatHistory'
 import { useChatMarkdown } from '../composables/useChatMarkdown'
+import { useCustomForms } from '../composables/useCustomForms'
 
 const props = defineProps({
   apiPath: {
@@ -16,8 +17,14 @@ const props = defineProps({
   selectedPrompt: {
     type: String,
     default: 'prompt'
+  },
+  selectedFormId: {
+    type: String,
+    default: null
   }
 })
+
+const emit = defineEmits(['clear-form'])
 
 // Composables
 const { parseMarkdown } = useChatMarkdown()
@@ -32,6 +39,18 @@ const scrollToBottom = async () => {
 
 const chatState = useChat(props.apiPath, () => saveHistory(chatState.messages), scrollToBottom, props.selectedModel, props.selectedPrompt)
 
+// 폼 관리 - inject로 제공된 인스턴스 사용, 없으면 새로 생성
+const injectedCustomForms = inject('customForms', null)
+const customForms = injectedCustomForms || useCustomForms()
+const { getForm, addFieldToForm, removeFieldFromForm, updateFormName, updateFieldValue, forms } = customForms
+const currentFormInputs = ref({})
+const newFieldName = ref('')
+
+const selectedForm = computed(() => {
+  if (!props.selectedFormId) return null
+  return getForm(props.selectedFormId)
+})
+
 // selectedModel 변경 감지
 watch(() => props.selectedModel, (newModel) => {
   chatState.selectedModel.value = newModel
@@ -41,6 +60,33 @@ watch(() => props.selectedModel, (newModel) => {
 watch(() => props.selectedPrompt, (newPrompt) => {
   chatState.selectedPrompt.value = newPrompt
 })
+
+// selectedFormId 변경 감지 - 폼 필드 값을 currentFormInputs에 로드
+watch(() => props.selectedFormId, (newFormId) => {
+  console.log('[ChatWindow] selectedFormId 변경:', newFormId)
+  console.log('[ChatWindow] 현재 forms:', forms.value)
+
+  if (newFormId) {
+    // selectedForm computed 대신 직접 getForm 호출
+    const form = getForm(newFormId)
+    console.log('[ChatWindow] getForm 결과:', form)
+
+    if (form) {
+      currentFormInputs.value = {}
+
+      // 폼의 각 필드의 value를 currentFormInputs에 로드
+      form.fields.forEach(field => {
+        currentFormInputs.value[field.id] = field.value
+      })
+
+      console.log('[ChatWindow] 폼 로드 완료, currentFormInputs:', currentFormInputs.value)
+    } else {
+      console.log('[ChatWindow] getForm으로 폼을 찾지 못함')
+    }
+  } else {
+    console.log('[ChatWindow] selectedFormId가 null')
+  }
+}, { immediate: false })
 
 // API 경로에 따른 제목 생성
 const getChatTitle = () => {
@@ -80,6 +126,10 @@ watch(chatState.messages, scrollToBottom)
 
 // 컴포넌트 마운트 시 히스토리 로드
 onMounted(() => {
+  const models = getModelList()
+  if (!chatState.selectedModel.value && models.length) {
+    chatState.selectedModel.value = models[0]
+  }
   loadHistory(chatState.messages)
 })
 
@@ -103,6 +153,87 @@ const getModelList = () => {
 const handleModelChange = (event) => {
   chatState.selectedModel.value = event.target.value
 }
+
+// 폼 필드 추가 (빈 필드명으로 추가)
+const handleAddField = () => {
+  if (!props.selectedFormId) return
+
+  // 빈 필드명으로 추가
+  addFieldToForm(props.selectedFormId, '')
+}
+
+// 폼 필드 삭제
+const handleDeleteField = (fieldId) => {
+  if (!props.selectedFormId) return
+  if (confirm('필드를 삭제하시겠습니까?')) {
+    removeFieldFromForm(props.selectedFormId, fieldId)
+    // 삭제된 필드의 입력값 제거
+    delete currentFormInputs.value[fieldId]
+  }
+}
+
+// 폼 저장 - 각 필드의 value 업데이트
+const handleSaveFormValues = () => {
+  console.log('[ChatWindow] handleSaveFormValues 호출됨')
+  if (!props.selectedFormId || !selectedForm.value) return
+
+  // 필드명이 비어있는지 확인
+  const hasEmptyNames = selectedForm.value.fields.some(f => !f.name.trim())
+  if (hasEmptyNames) {
+    alert('모든 필드명을 입력해주세요.')
+    return
+  }
+
+  // 각 필드의 value를 currentFormInputs의 값으로 업데이트
+  selectedForm.value.fields.forEach(field => {
+    const newValue = currentFormInputs.value[field.id] || ''
+    console.log(`[ChatWindow] 필드 '${field.name}' 값 업데이트: '${field.value}' → '${newValue}'`)
+    updateFieldValue(props.selectedFormId, field.id, newValue)
+  })
+
+  console.log('[ChatWindow] 모든 필드 값이 저장되었습니다')
+}
+
+// 폼 전송 - 필드명 검증 후 메시지 작성
+const handleSendForm = () => {
+  if (!selectedForm.value) return
+
+  // 필드명이 비어있는지 확인
+  const hasEmptyNames = selectedForm.value.fields.some(f => !f.name.trim())
+  if (hasEmptyNames) {
+    alert('모든 필드명을 입력해주세요.')
+    return
+  }
+
+  // 폼 데이터를 메시지로 변환
+  const lines = selectedForm.value.fields.map(f => `${f.name}: ${currentFormInputs.value[f.id] || ''}`).join('\n')
+  chatState.inputMessage.value = `[${selectedForm.value.name}]\n${lines}`
+
+  // 폼 선택 해제
+  emit('clear-form')
+}
+
+// 폼 입력 처리
+const handleFormInput = (data) => {
+  if (!data || !data.input) return
+
+  // 폼 입력 데이터를 메시지에 포함
+  const formMessage = `[${data.formName}]\n${data.input}`
+  chatState.inputMessage.value = formMessage
+
+  // 자동 전송 (옵션: 수동 전송으로 변경 가능)
+  // chatState.handleSendMessage()
+}
+
+// 외부에서 입력 메시지를 설정하는 메서드 (프롬프트 적용 시 사용)
+const setInputMessage = (content) => {
+  chatState.inputMessage.value = content
+}
+
+// 외부 컴포넌트에서 접근 가능하도록 expose
+defineExpose({
+  setInputMessage
+})
 </script>
 
 <template>
@@ -111,11 +242,10 @@ const handleModelChange = (event) => {
       <h2>{{ getChatTitle() }}</h2>
       <div class="header-controls">
         <select
-          :value="chatState.selectedModel.value || ''"
+          :value="chatState.selectedModel.value || getModelList()[0] || ''"
           @change="handleModelChange"
           class="model-select"
         >
-          <option value="">Default Model</option>
           <option v-for="model in getModelList()" :key="model" :value="model">
             {{ model }}
           </option>
@@ -151,7 +281,8 @@ const handleModelChange = (event) => {
       </div>
     </div>
 
-    <div class="input-area">
+    <!-- 일반 채팅 입력 -->
+    <div v-if="!selectedForm" class="input-area">
       <textarea
         :ref="(el) => { chatState.textareaRef.value = el }"
         v-model="chatState.inputMessage.value"
@@ -171,324 +302,82 @@ const handleModelChange = (event) => {
         {{ chatState.isLoading.value ? 'Sending...' : 'Send' }}
       </button>
     </div>
+
+    <!-- 폼 입력 영역 -->
+    <div v-else class="form-input-area">
+      <!-- 폼 헤더 -->
+      <div class="form-header">
+        <h4>{{ selectedForm.name }}</h4>
+        <div class="form-header-buttons">
+          <button class="btn-add-field-header" @click="handleAddField" title="필드 추가">
+            ➕ 필드 추가
+          </button>
+          <button class="btn-back-to-chat" @click="$emit('clear-form')" title="채팅으로 돌아가기">
+            💬 채팅
+          </button>
+        </div>
+      </div>
+
+      <!-- 폼 필드 영역 -->
+      <div class="form-fields">
+        <div v-if="selectedForm.fields.length === 0" class="empty-fields">
+          필드가 없습니다. 위의 "➕ 필드 추가" 버튼으로 필드를 추가하세요.
+        </div>
+
+        <!-- 항상 필드명과 값을 수정할 수 있는 영역 -->
+        <div v-for="field in selectedForm.fields" :key="field.id" class="form-field-wrapper">
+          <!-- 필드명 수정 입력 -->
+          <div class="field-header">
+            <input
+              :value="field.name"
+              @blur="(e) => { field.name = e.target.value; forms = [...forms] }"
+              type="text"
+              class="field-name-input-inline"
+              placeholder="필드명"
+            />
+            <button
+              class="btn-delete-field"
+              @click="handleDeleteField(field.id)"
+              title="필드 삭제"
+            >
+              ✕
+            </button>
+          </div>
+
+          <!-- 필드값 입력 -->
+          <input
+            :id="`field-${field.id}`"
+            :value="currentFormInputs[field.id]"
+            @input="currentFormInputs[field.id] = $event.target.value"
+            type="text"
+            class="form-input"
+            :placeholder="`값 입력`"
+          />
+        </div>
+      </div>
+
+      <!-- 폼 액션 버튼 -->
+      <div class="form-actions">
+        <button
+          class="form-btn form-save-btn"
+          @click="handleSaveFormValues"
+          title="입력값 저장"
+        >
+          💾 저장
+        </button>
+        <button
+          class="form-btn form-send-btn"
+          @click="handleSendForm"
+          :disabled="chatState.isLoading.value"
+          title="메시지로 전송"
+        >
+          ✈️ 전송
+        </button>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.chat-window {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  height: 100%;
-  background-color: #fff;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  overflow: hidden;
-}
-
-.chat-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px;
-  background-color: #007bff;
-  color: white;
-  border-bottom: 1px solid #ddd;
-}
-
-.chat-header h2 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.header-controls {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.model-select {
-  padding: 6px 10px;
-  background-color: rgba(255, 255, 255, 0.2);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 12px;
-  transition: background-color 0.3s;
-}
-
-.model-select option {
-  background-color: #fff;
-  color: #333;
-}
-
-.model-select:hover {
-  background-color: rgba(255, 255, 255, 0.3);
-}
-
-.clear-btn {
-  padding: 6px 12px;
-  background-color: rgba(255, 255, 255, 0.2);
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 12px;
-  transition: background-color 0.3s;
-}
-
-.clear-btn:hover:not(:disabled) {
-  background-color: rgba(255, 255, 255, 0.3);
-}
-
-.clear-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.messages-container {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  background-color: #f9f9f9;
-  min-height: 300px;
-}
-
-.empty-state {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: #999;
-  text-align: center;
-}
-
-.message {
-  display: flex;
-  margin-bottom: 8px;
-}
-
-.message.user {
-  justify-content: flex-end;
-}
-
-.message.assistant {
-  justify-content: flex-start;
-}
-
-.message-bubble {
-  max-width: 70%;
-  padding: 10px 14px;
-  border-radius: 8px;
-  word-wrap: break-word;
-  white-space: pre-wrap;
-}
-
-.message.user .message-bubble {
-  background-color: #007bff;
-  color: white;
-}
-
-.message.assistant .message-bubble {
-  background-color: #e9ecef;
-  color: #000;
-}
-
-.markdown-content h1,
-.markdown-content h2,
-.markdown-content h3,
-.markdown-content h4,
-.markdown-content h5,
-.markdown-content h6 {
-  margin: 12px 0 8px 0;
-  font-weight: 600;
-}
-
-.markdown-content h1 {
-  font-size: 20px;
-}
-
-.markdown-content h2 {
-  font-size: 18px;
-}
-
-.markdown-content h3 {
-  font-size: 16px;
-}
-
-.markdown-content h4 {
-  font-size: 15px;
-}
-
-.markdown-content ul,
-.markdown-content ol {
-  margin: 8px 0;
-  padding-left: 20px;
-}
-
-.markdown-content li {
-  margin: 4px 0;
-  line-height: 1.5;
-}
-
-.markdown-content code {
-  background-color: rgba(0, 0, 0, 0.1);
-  padding: 2px 6px;
-  border-radius: 3px;
-  font-family: monospace;
-  font-size: 13px;
-}
-
-.markdown-content pre {
-  background-color: rgba(0, 0, 0, 0.15);
-  padding: 10px;
-  border-radius: 5px;
-  overflow-x: auto;
-  margin: 8px 0;
-  line-height: 1.4;
-}
-
-.markdown-content pre code {
-  background-color: transparent;
-  padding: 0;
-  font-size: 12px;
-}
-
-.markdown-content blockquote {
-  border-left: 4px solid rgba(0, 0, 0, 0.2);
-  margin: 8px 0;
-  padding: 8px 12px;
-  background-color: rgba(0, 0, 0, 0.05);
-  font-style: italic;
-}
-
-.markdown-content a {
-  color: #0056b3;
-  text-decoration: none;
-}
-
-.markdown-content a:hover {
-  text-decoration: underline;
-}
-
-.markdown-content table {
-  border-collapse: collapse;
-  margin: 8px 0;
-  width: 100%;
-}
-
-.markdown-content table td,
-.markdown-content table th {
-  border: 1px solid rgba(0, 0, 0, 0.2);
-  padding: 6px 8px;
-  text-align: left;
-}
-
-.markdown-content table th {
-  background-color: rgba(0, 0, 0, 0.1);
-  font-weight: 600;
-}
-
-.markdown-content p {
-  margin: 6px 0;
-  line-height: 1.6;
-}
-
-.timestamp {
-  display: block;
-  font-size: 11px;
-  margin-top: 4px;
-  opacity: 0.7;
-}
-
-.message.user .timestamp {
-  color: rgba(255, 255, 255, 0.7);
-  text-align: right;
-}
-
-.message.assistant .timestamp {
-  color: rgba(0, 0, 0, 0.6);
-}
-
-.loading-indicator {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px;
-  color: #666;
-  font-size: 14px;
-}
-
-.spinner {
-  width: 16px;
-  height: 16px;
-  border: 2px solid #ddd;
-  border-top-color: #007bff;
-  border-radius: 50%;
-  animation: spin 0.6s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.input-area {
-  display: flex;
-  gap: 8px;
-  padding: 12px;
-  border-top: 1px solid #ddd;
-  background-color: #fff;
-}
-
-.message-input {
-  flex: 1;
-  padding: 10px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-family: inherit;
-  font-size: 14px;
-  resize: none;
-  transition: border-color 0.3s;
-  overflow: scrollHeight;
-}
-
-.message-input:focus {
-  outline: none;
-  border-color: #007bff;
-  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.1);
-}
-
-.message-input:disabled {
-  background-color: #f0f0f0;
-  cursor: not-allowed;
-}
-
-.send-btn {
-  padding: 10px 20px;
-  background-color: #007bff;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-weight: 600;
-  transition: background-color 0.3s;
-  white-space: nowrap;
-}
-
-.send-btn:hover:not(:disabled) {
-  background-color: #0056b3;
-}
-
-.send-btn:disabled {
-  background-color: #ccc;
-  cursor: not-allowed;
-}
+@import './ChatWindow.css';
 </style>
