@@ -1,7 +1,6 @@
 <script setup>
-import { computed, provide, ref } from 'vue'
+import { computed, provide, ref, watch } from 'vue'
 import PromptManagerPanel from './components/PromptManagerPanel.vue'
-import ModelControlPanel from './components/ModelControlPanel.vue'
 import ResponseStreamPanel from './components/ResponseStreamPanel.vue'
 
 const g_selectedSystemPrompt = ref(null)
@@ -16,6 +15,24 @@ const g_generationOptions = ref({
   systemOverride: ''
 })
 
+const modelFamilies = [
+  {
+    id: 'gpt',
+    label: 'ChatGPT',
+    subModels: ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4o', 'gpt-3.5-turbo']
+  },
+  {
+    id: 'gemini',
+    label: 'Gemini',
+    subModels: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro']
+  },
+  {
+    id: 'grok',
+    label: 'Grok',
+    subModels: ['grok-4-1-fast-reasoning', 'grok-4-1-fast-non-reasoning', 'grok-3']
+  }
+]
+
 provide('g_isStreaming', g_isStreaming)
 
 const responsePanelRef = ref(null)
@@ -26,21 +43,32 @@ const providerApiPath = computed(() => {
   return '/api/grok/prompt-chat'
 })
 
-const readyForRun = computed(() => {
-  // 입력 프롬프트만 필수 (좌측 패널)
-  return Boolean(g_selectedInputPrompt.value)
+const subModelOptions = computed(() => {
+  const family = modelFamilies.find((item) => item.id === g_selectedProvider.value)
+  return family?.subModels || []
 })
 
-const systemPromptLabel = computed(() => g_selectedSystemPrompt.value?.title || '')
-const inputPromptLabel = computed(() => g_selectedInputPrompt.value?.title || '')
+watch(
+  () => g_selectedProvider.value,
+  () => {
+    const available = subModelOptions.value
+    if (!available.includes(g_selectedModel.value)) {
+      g_selectedModel.value = available[0] || ''
+    }
+  },
+  { immediate: true }
+)
+
+const readyForRun = computed(() => Boolean(g_selectedInputPrompt.value))
 
 const handleExecute = () => {
   if (!readyForRun.value || !responsePanelRef.value) return
 
-  // 시스템 프롬프트: 페르소나 설정이 있으면 사용, 아니면 좌측 패널의 시스템 프롬프트 사용
-  const systemPrompt = g_generationOptions.value.systemOverride
-    ? { id: 'persona', content: g_generationOptions.value.systemOverride }
-    : g_selectedSystemPrompt.value
+  const systemPrompt =
+    g_selectedSystemPrompt.value ||
+    (g_generationOptions.value.systemOverride && g_generationOptions.value.systemOverride.trim()
+      ? { content: g_generationOptions.value.systemOverride }
+      : null)
 
   responsePanelRef.value.runExecution(
     systemPrompt,
@@ -52,15 +80,19 @@ const handleExecute = () => {
 const handleStreamState = (isStreaming) => {
   g_isStreaming.value = isStreaming
 }
+
+const handleUpdateInput = (prompt) => {
+  g_selectedInputPrompt.value = prompt
+}
 </script>
 
 <template>
   <div class="app-shell">
     <header class="studio-header">
       <div class="header-content">
-        <p class="tagline">모델 출력 비교</p>
-        <h1>모델 출력 비교</h1>
-        <p class="subhead">프롬프트 선택 → 모델 실행 → 응답 비교까지 한눈에.</p>
+        <p class="tagline">입력정보 / 프롬프트 구성</p>
+        <h1>프롬프트 스튜디오</h1>
+        <p class="subhead">입력정보를 구성하고 실행해 결과를 확인하세요.</p>
       </div>
       <div class="status-chip" :class="{ live: g_isStreaming }">
         <span class="dot"></span>
@@ -69,38 +101,40 @@ const handleStreamState = (isStreaming) => {
     </header>
 
     <main class="studio-layout">
-      <!-- 좌측: 프롬프트 선택/관리 -->
       <section class="panel left-panel" :class="{ locked: g_isStreaming }">
         <div class="panel-header">
-          <div>
-            <h2>1. 입력 값 설정</h2>
-            <p class="eyebrow">모델에 전송 할 입력 값을 설정하세요</p>
+          <div class="panel-title">
+            <h2>입력정보</h2>
+          </div>
+          <div class="model-selects">
+            <select v-model="g_selectedProvider">
+              <option v-for="family in modelFamilies" :key="family.id" :value="family.id">
+                {{ family.label }}
+              </option>
+            </select>
+            <select v-model="g_selectedModel">
+              <option v-for="sub in subModelOptions" :key="sub" :value="sub">
+                {{ sub }}
+              </option>
+            </select>
           </div>
         </div>
 
-        <PromptManagerPanel
-          @update:system="(p) => (g_selectedSystemPrompt = p)"
-          @update:input="(p) => (g_selectedInputPrompt = p)"
-        />
+        <div class="left-body">
+          <PromptManagerPanel @update:input="handleUpdateInput" @update:system="(p) => (g_selectedSystemPrompt = p)" />
+        </div>
       </section>
 
-      <!-- 중앙: 모델 선택 + 옵션 + 실행 -->
       <section class="panel center-panel" :class="{ locked: g_isStreaming }">
-        <ModelControlPanel
-          :system-prompt-label="systemPromptLabel"
-          :input-prompt-label="inputPromptLabel"
-          :selected-provider="g_selectedProvider"
-          :selected-model="g_selectedModel"
-          :disabled="g_isStreaming"
-          :ready-for-run="readyForRun"
-          @update:provider="(p) => (g_selectedProvider = p)"
-          @update:model="(m) => (g_selectedModel = m)"
-          @update:options="(opts) => (g_generationOptions = opts)"
-          @execute="handleExecute"
-        />
+        <button
+          class="run-button center-only"
+          :disabled="g_isStreaming || !readyForRun"
+          @click="handleExecute"
+        >
+          AI 답변 시작
+        </button>
       </section>
 
-      <!-- 우측: 응답 스트리밍 + 비교 -->
       <section class="panel right-panel">
         <ResponseStreamPanel
           ref="responsePanelRef"
@@ -108,6 +142,7 @@ const handleStreamState = (isStreaming) => {
           :selected-model="g_selectedModel"
           :system-prompt="g_selectedSystemPrompt"
           :input-prompt="g_selectedInputPrompt"
+          :model-info="{ provider: g_selectedProvider, model: g_selectedModel }"
           @stream-state-change="handleStreamState"
         />
       </section>
@@ -210,9 +245,8 @@ const handleStreamState = (isStreaming) => {
 
 .studio-layout {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  grid-template-rows: 1fr;
-  gap: 20px;
+  grid-template-columns: 1.6fr 0.65fr 1.1fr;
+  gap: 18px;
   flex: 1;
   height: 100%;
   min-height: 0;
@@ -234,6 +268,20 @@ const handleStreamState = (isStreaming) => {
   min-width: 0;
   box-sizing: border-box;
   overflow: hidden;
+}
+
+.center-panel {
+  align-self: center;
+  justify-self: center;
+  width: 100%;
+  max-width: 200px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 
 .panel.locked {
@@ -259,144 +307,124 @@ const handleStreamState = (isStreaming) => {
   padding: 18px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(255, 255, 255, 0.02);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.panel-header h2 {
-  margin: 4px 0 0;
+.panel-title h2 {
+  margin: 0;
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: -0.2px;
+}
+
+.model-selects {
+  display: flex;
+  gap: 10px;
+}
+
+.model-selects select {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: #e6ecff;
+  font-size: 13px;
+  outline: none;
+}
+
+.model-selects select:focus {
+  border-color: rgba(99, 179, 255, 0.8);
 }
 
 .eyebrow {
   margin: 0 0 4px 0;
   color: #8fb5ff;
   letter-spacing: 0.1em;
-  font-size: 14px;
+  font-size: 12px;
   text-transform: uppercase;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .left-panel {
-  grid-column: 1;
   padding: 0;
-  align-self: stretch;
-  min-width: 200px;
+  min-width: 280px;
 }
 
-.arrow-container {
-  grid-column: 2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 0;
+.left-body {
+  padding: 16px;
   height: 100%;
-}
-
-.next-step-indicator {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 12px 14px;
-  background: linear-gradient(135deg, rgba(99, 255, 221, 0.15), rgba(99, 179, 255, 0.15));
-  border: 1px solid rgba(99, 255, 221, 0.4);
-  border-radius: 12px;
-  width: auto;
-  height: 48px;
-  box-sizing: border-box;
-}
-
-.arrow-placeholder {
-  width: 43.84px;
-  height: 48px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-bottom: 22px;
   box-sizing: border-box;
 }
 
 .center-panel {
-  grid-column: 2;
-  padding: 0;
   align-self: center;
   justify-self: center;
-  width: fit-content;
-  height: fit-content;
+  width: 100%;
+  max-width: 200px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.run-button {
+  padding: 14px 20px;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #63b3ff 0%, #63ffdd 100%);
+  color: #0b1221;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  width: 100%;
+}
+
+.run-button.center-only {
+  max-width: 220px;
+}
+
+.run-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 30px rgba(99, 179, 255, 0.4);
+}
+
+.run-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .right-panel {
-  grid-column: 3;
   padding: 0;
-  align-self: stretch;
   min-height: 0;
-  min-width: 200px;
+  min-width: 260px;
 }
 
 .left-panel :deep(.prompt-manager) {
-  padding: 18px;
+  padding: 14px;
   height: 100%;
-}
-
-.indicator-text {
-  margin: 0;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.arrow-icon {
-  font-size: 16px;
-  font-weight: 700;
-  color: #63b3ff;
-}
-
-.arrow-pop-enter-active,
-.arrow-pop-leave-active {
-  transition: all 0.3s ease;
-}
-
-.arrow-pop-enter-from,
-.arrow-pop-leave-to {
-  opacity: 0;
-  transform: translateY(8px);
 }
 
 @media (max-width: 1200px) {
   .studio-layout {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .center-panel {
-    grid-column: 1 / span 2;
-    width: 100%;
-  }
-
-  .right-panel {
-    grid-column: 1 / span 2;
-  }
-
-  .panel {
-    min-height: auto;
-  }
-}
-
-@media (max-width: 960px) {
-  .studio-layout {
     grid-template-columns: 1fr;
   }
 
-  .center-panel {
-    grid-column: 1;
-    width: 100%;
-  }
-
-  .right-panel {
+  .center-panel,
+  .right-panel,
+  .left-panel {
     grid-column: 1;
   }
 
-  .studio-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .studio-header h1 {
-    font-size: 24px;
+  .left-body {
+    grid-template-columns: 1fr;
   }
 }
 </style>

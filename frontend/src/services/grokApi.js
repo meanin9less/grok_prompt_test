@@ -1,14 +1,20 @@
 const BACKEND_URL = 'http://localhost:8000'
 
-export async function sendMessage(message, onChunk, apiPath = '/api/grok/chat', history = [], model = null, promptKey = 'prompt') {
+export async function sendMessage(message, onChunk, apiPath = '/api/grok/chat', history = [], model = null, systemPrompt = null, modelInfo = null, inputTitle = '') {
   const body = { message, history }
   if (model) {
     body.model = model
   }
-  if (promptKey) {
-    body.prompt_key = promptKey
+  if (systemPrompt) {
+    body.system_prompt = systemPrompt
   }
-  console.log('Sending message with model:', model || 'default', 'prompt_key:', promptKey, 'Body:', body)
+  if (modelInfo) {
+    body.model_info = modelInfo
+  }
+  if (inputTitle) {
+    body.input_title = inputTitle
+  }
+  console.log('Sending message with model:', model || 'default', 'system_prompt:', systemPrompt ? systemPrompt.slice(0, 60) + '...' : 'none', 'Body:', body)
 
   const response = await fetch(`${BACKEND_URL}${apiPath}`, {
     method: 'POST',

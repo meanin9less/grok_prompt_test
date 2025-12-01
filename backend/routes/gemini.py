@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from services import gemini_service_prompt
 from utils import GrokAPIError
 
@@ -18,6 +18,9 @@ class ChatRequest(BaseModel):
     history: List[Message] = []
     model: Optional[str] = None
     prompt_key: Optional[str] = "prompt"
+    system_prompt: Optional[str] = None
+    model_info: Optional[Dict[str, Any]] = None
+    input_title: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
@@ -40,7 +43,15 @@ async def prompt_chat(request: ChatRequest):
     try:
         async def generate():
             history = [{"role": msg.role, "content": msg.content} for msg in request.history]
-            async for chunk in gemini_service_prompt.chat(request.message, history, prompt_key=request.prompt_key, model=request.model):
+            async for chunk in gemini_service_prompt.chat(
+                request.message,
+                history,
+                prompt_key=request.prompt_key,
+                model=request.model,
+                system_prompt=request.system_prompt,
+                model_info=request.model_info,
+                input_title=request.input_title
+            ):
                 yield chunk
 
         return StreamingResponse(generate(), media_type="text/event-stream")

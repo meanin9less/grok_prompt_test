@@ -8,6 +8,10 @@ const props = defineProps({
     type: [String, Object],
     default: '/api/grok/prompt-chat'
   },
+  modelInfo: {
+    type: Object,
+    default: null
+  },
   selectedModel: {
     type: String,
     default: null
@@ -96,7 +100,7 @@ const runExecution = (systemPrompt, inputPrompt) => {
         if (assistantMsg) {
           assistantMsg.text += chunk
         }
-      }, apiPath, [], chat.selectedModel.value, systemPrompt?.id || 'system')
+      }, apiPath, [], chat.selectedModel.value, systemPrompt?.content || '', props.modelInfo || null, inputPrompt?.title || '')
 
       const endTime = Date.now()
       const assistantMsg = chat.messages.value.find(msg => msg.id === assistantMessageId)
