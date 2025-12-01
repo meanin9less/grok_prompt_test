@@ -171,6 +171,19 @@ const startSystemEdit = () => {
   state.systemMode = 'edit'
 }
 
+const cancelSystemEditOrCreate = () => {
+  if (state.systemPrompts.length) {
+    const target = state.systemPrompts.find((p) => p.id === state.selectedSystemId) || state.systemPrompts[0]
+    state.selectedSystemId = target?.id || null
+    state.systemDraft = target ? { ...target } : { title: '', content: '' }
+    state.systemMode = target ? 'view' : 'create'
+  } else {
+    state.systemDraft = { title: '', content: '' }
+    state.systemMode = 'create'
+    state.systemModalOpen = false
+  }
+}
+
 const saveSystemPrompt = () => {
   if (!state.systemDraft.title.trim() || !state.systemDraft.content.trim()) return
   const id = state.selectedSystemId || Math.random().toString(36).slice(2, 11)
@@ -196,6 +209,7 @@ const deleteSystemPrompt = () => {
 
 const applySystemPrompt = () => {
   if (!selectedSystem.value) return
+  if (state.systemMode !== 'view') return
   emit('update:system', selectedSystem.value)
   state.systemModalOpen = false
 }
@@ -593,18 +607,18 @@ onMounted(() => {
   <teleport to="body">
     <div class="system-modal" v-if="state.systemModalOpen">
       <div class="template-modal-content">
-        <div class="modal-header">
-          <div>
-            <p class="eyebrow template-title">프롬프트</p>
-            <h4>{{ state.systemMode === 'create' ? '프롬프트 관리' : '템플릿 선택' }}</h4>
+          <div class="modal-header">
+            <div>
+              <p class="eyebrow template-title">프롬프트</p>
+              <h4>{{ state.systemMode === 'create' ? '새 프롬프트 추가' : '프롬프트 관리' }}</h4>
+            </div>
+            <div class="header-actions">
+              <button class="ghost-btn" @click="startSystemCreate">+ 새 프롬프트</button>
+              <button class="ghost-btn" @click="closeSystemModal">닫기</button>
+            </div>
           </div>
-          <div class="header-actions">
-            <button class="ghost-btn" @click="startSystemCreate">+ 새 프롬프트</button>
-            <button class="ghost-btn" @click="closeSystemModal">닫기</button>
-          </div>
-        </div>
-        <div class="template-layout">
-          <div class="template-list">
+          <div class="template-layout">
+            <div class="template-list">
             <div
               v-for="sp in state.systemPrompts"
               :key="sp.id"
@@ -616,23 +630,45 @@ onMounted(() => {
               <p class="meta">본문 {{ sp.content.length }}자</p>
             </div>
             <div v-if="state.systemPrompts.length === 0" class="empty">프롬프트가 없습니다.</div>
+            </div>
+            <div class="template-detail">
+              <div class="field">
+                <label>제목</label>
+                <input
+                  v-model="state.systemDraft.title"
+                  :disabled="state.systemMode === 'view'"
+                  placeholder="시스템 프롬프트 제목"
+                />
+              </div>
+              <div class="field">
+                <label>내용</label>
+                <textarea
+                  v-model="state.systemDraft.content"
+                  rows="8"
+                  :disabled="state.systemMode === 'view'"
+                  placeholder="시스템 프롬프트 내용을 입력하세요."
+              ></textarea>
+              </div>
+              <div class="actions">
+                <div class="action-left">
+                  <template v-if="state.systemMode === 'create'">
+                    <button class="primary-btn" @click="saveSystemPrompt">저장</button>
+                    <button class="ghost-btn" @click="cancelSystemEditOrCreate">취소</button>
+                  </template>
+                  <template v-else>
+                    <button class="ghost-btn" v-if="state.systemMode === 'view' && selectedSystem" @click="startSystemEdit">수정</button>
+                    <button class="primary-btn" v-if="state.systemMode === 'edit'" @click="saveSystemPrompt">저장</button>
+                    <button class="ghost-btn danger" v-if="selectedSystem" @click="deleteSystemPrompt">삭제</button>
+                  </template>
+                </div>
+                <div class="action-right">
+                  <template v-if="state.systemMode !== 'create'">
+                    <button class="ghost-btn" @click="applySystemPrompt" :disabled="!selectedSystem || state.systemMode !== 'view'">적용</button>
+                  </template>
+                </div>
+              </div>
+            </div>
           </div>
-          <div class="template-detail">
-            <div class="field">
-              <label>제목</label>
-              <input v-model="state.systemDraft.title" placeholder="시스템 프롬프트 제목" />
-            </div>
-            <div class="field">
-              <label>내용</label>
-              <textarea v-model="state.systemDraft.content" rows="8" placeholder="시스템 프롬프트 내용을 입력하세요."></textarea>
-            </div>
-            <div class="actions">
-              <button class="primary-btn" @click="saveSystemPrompt">{{ state.systemMode === 'create' ? '저장' : '업데이트' }}</button>
-              <button class="ghost-btn" @click="applySystemPrompt" :disabled="!selectedSystem">적용</button>
-              <button class="ghost-btn danger" v-if="selectedSystem" @click="deleteSystemPrompt">삭제</button>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   </teleport>
@@ -988,8 +1024,22 @@ onMounted(() => {
 }
 
 .actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  align-items: center;
+}
+
+.action-left {
   display: flex;
   gap: 8px;
+  justify-content: flex-start;
+}
+
+.action-right {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 .primary-btn {
