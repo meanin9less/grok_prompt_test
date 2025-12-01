@@ -458,18 +458,21 @@ onMounted(() => {
     <div class="system-toolbar">
       <div>
         <p class="selected-badge" v-if="selectedSystem">선택된 프롬프트</p>
-        <h3 class="meta-title">{{ selectedSystem?.title || '프롬프트를 선택하세요.' }}</h3>
+        <h3 class="meta-title">{{ selectedSystem?.title || '프롬프트 관리에서 프롬프트를 선택하세요.' }}</h3>
       </div>
       <div class="system-actions">
         <button class="ghost-btn" @click="openSystemModal">프롬프트 관리</button>
       </div>
     </div>
       <div class="list-pane">
+        <div class="list-pane-header">
+          <h3>입력 정보 목록</h3>
+        </div>
         <div class="tab-row">
           <button
             class="tab-btn"
             :class="{ active: state.activeTab === 'text' }"
-          @click="state.activeTab = 'text'"
+            @click="state.activeTab = 'text'"
         >
           텍스트
         </button>
@@ -781,6 +784,17 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   min-width: 0;
+}
+
+.list-pane-header {
+  padding: 4px 2px 8px;
+}
+
+.list-pane-header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.15px;
 }
 
 .detail-pane {

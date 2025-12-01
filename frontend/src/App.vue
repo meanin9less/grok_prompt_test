@@ -112,7 +112,7 @@ const handleMetaToggle = (payload) => {
       <section class="panel left-panel" :class="{ locked: g_isStreaming, covered: g_metaOpen }">
         <div class="panel-header">
           <div class="panel-title">
-            <h2>입력 정보</h2>
+            <h2>입력 정보 & 프롬프트 설정</h2>
           </div>
           <div class="model-selects">
             <select v-model="g_selectedProvider">
