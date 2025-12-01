@@ -69,10 +69,10 @@ class GeminiServicePrompt:
                                 delta = data["choices"][0].get("delta", {})
                                 content = delta.get("content", "")
                                 if content:
-                                    # 줄바꿈 문자 처리 (escaped \n을 실제 줄바꿈으로 변환)
-                                    content = content.replace("\\n", "\n")
+                                    # JSON으로 감싸 개행이 이스케이프된 상태로 단일 SSE 라인에 실어 보낸다
+                                    payload = json.dumps({"content": content})
                                     logger.debug(f"[Gemini Chunk] {repr(content[:50])}")
-                                    yield f"data: {content}\n\n"
+                                    yield f"data: {payload}\n\n"
                         except json.JSONDecodeError:
                             continue
 

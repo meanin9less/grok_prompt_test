@@ -733,13 +733,6 @@ onMounted(() => {
           </div>
           <div class="header-actions">
             <button class="ghost-btn" @click="startTemplateCreate">+ 템플릿 추가</button>
-            <button
-              class="ghost-btn"
-              v-if="state.templateMode === 'view' && state.selectedTemplateId"
-              @click="startTemplateEdit"
-            >
-              수정
-            </button>
             <button class="ghost-btn" @click="closeTemplateModal">닫기</button>
           </div>
         </div>
@@ -793,13 +786,6 @@ onMounted(() => {
               </button>
               <button class="ghost-btn" v-else @click="cancelTemplateEditOrCreate">취소</button>
               <button
-                v-if="state.templateMode !== 'view'"
-                class="primary-btn"
-                @click="saveTemplate"
-              >
-                저장
-              </button>
-              <button
                 class="ghost-btn danger"
                 v-if="state.templateMode !== 'create' && state.selectedTemplateId"
                 @click="deleteTemplate"
@@ -807,7 +793,14 @@ onMounted(() => {
                 삭제
               </button>
               <button
-                class="ghost-btn"
+                v-if="state.templateMode !== 'view'"
+                :class="['primary-btn', { 'save-btn': state.templateMode !== 'view' }]"
+                @click="saveTemplate"
+              >
+                저장
+              </button>
+              <button
+                class="ghost-btn apply-btn"
                 @click="applyTemplate"
                 :disabled="!state.templateDraft.name || state.templateMode !== 'view'"
                 v-if="state.templateMode === 'view'"
@@ -1296,6 +1289,21 @@ onMounted(() => {
   flex: 0 0 auto;
   min-width: 72px;
   align-self: center;
+}
+
+.template-detail .actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.template-detail .actions .apply-btn {
+  margin-left: auto;
+}
+
+.template-detail .actions .save-btn {
+  margin-left: auto;
 }
 
 @media (max-width: 700px) {
