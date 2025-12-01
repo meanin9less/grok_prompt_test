@@ -198,7 +198,7 @@ const sendMessageStream = async (inputText, run, systemPrompt) => {
       }
 
       scrollToBottom()
-    }, apiPath, [], props.model || null, systemPrompt?.content || '', props.modelVersion || null, '')
+    }, apiPath, [], props.model || null, systemPrompt?.content || null, props.modelVersion || null, '')
 
   } catch (error) {
     console.error('Error:', error)
@@ -232,32 +232,7 @@ watch(selectedRunId, () => {
 
 <template>
   <div class="response-panel split">
-    <aside class="answer-list">
-      <div class="answer-list-header">
-        <div>
-          <h3>답변 이력</h3>
-        </div>
-        <button class="ghost-btn xs" @click="runs = []; persistRuns(); clearMessages()">초기화</button>
-      </div>
-      <div class="answer-items">
-        <div
-          v-for="run in runs"
-          :key="run.id"
-          class="answer-item"
-          :class="{ active: run.id === selectedRunId }"
-          @click="selectRun(run.id)"
-        >
-          <div class="item-titles">
-            <p class="title">{{ run.title }}</p>
-            <p class="subtitle">{{ run.modelVersion }}</p>
-          </div>
-          <p class="tiny">{{ new Date(run.createdAt).toLocaleTimeString() }}</p>
-        </div>
-        <div v-if="!runs.length" class="empty">답변 이력이 없습니다.</div>
-      </div>
-    </aside>
-
-    <div class="answer-detail">
+    <div class="answer-detail combined">
       <header class="response-header">
         <div>
           <h3>{{ selectedRun?.title || 'AI 응답' }}</h3>
@@ -271,55 +246,82 @@ watch(selectedRunId, () => {
         </div>
       </header>
 
-      <div class="stream-area" :ref="setMessagesContainer">
-        <div v-if="!messages.length" class="empty">
-          <div class="empty-card">
-            <div class="step">
-              <span class="step-badge">1</span>
-              <div>
-                <p class="step-title">입력 값 설정</p>
-                <p class="step-desc">텍스트 혹은 폼을 선택·작성해 주세요.</p>
-              </div>
+      <div class="answer-body">
+        <aside class="answer-list">
+          <div class="answer-list-header">
+            <div>
+              <h3>답변 이력</h3>
             </div>
-            <div class="step">
-              <span class="step-badge">2</span>
-              <div>
-                <p class="step-title">프롬프트 선택</p>
-                <p class="step-desc">좌측에서 사용할 프롬프트를 고릅니다.</p>
+            <button class="ghost-btn xs" @click="runs = []; persistRuns(); clearMessages()">초기화</button>
+          </div>
+          <div class="answer-items">
+            <div
+              v-for="run in runs"
+              :key="run.id"
+              class="answer-item"
+              :class="{ active: run.id === selectedRunId }"
+              @click="selectRun(run.id)"
+            >
+              <div class="item-titles">
+                <p class="title">{{ run.title }}</p>
+                <p class="subtitle">{{ run.modelVersion }}</p>
               </div>
+              <p class="tiny">{{ new Date(run.createdAt).toLocaleTimeString() }}</p>
             </div>
-            <div class="step">
-              <span class="step-badge">3</span>
-              <div>
-                <p class="step-title">AI 답변 시작</p>
-                <p class="step-desc">센터의 버튼을 눌러 스트리밍을 확인하세요.</p>
+            <div v-if="!runs.length" class="empty">답변 이력이 없습니다.</div>
+          </div>
+        </aside>
+
+        <div class="stream-area" :ref="setMessagesContainer">
+          <div v-if="!messages.length" class="empty">
+            <div class="empty-card">
+              <div class="step">
+                <span class="step-badge">1</span>
+                <div>
+                  <p class="step-title">입력 값 설정</p>
+                  <p class="step-desc">텍스트 혹은 폼을 선택·작성해 주세요.</p>
+                </div>
+              </div>
+              <div class="step">
+                <span class="step-badge">2</span>
+                <div>
+                  <p class="step-title">프롬프트 선택</p>
+                  <p class="step-desc">좌측에서 사용할 프롬프트를 고릅니다.</p>
+                </div>
+              </div>
+              <div class="step">
+                <span class="step-badge">3</span>
+                <div>
+                  <p class="step-title">AI 답변 시작</p>
+                  <p class="step-desc">센터의 버튼을 눌러 스트리밍을 확인하세요.</p>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-        <div
-          v-for="msg in messages"
-          :key="`${msg.id}-${msg.text?.length || 0}`"
-          class="message"
-          :class="msg.sender || 'assistant'"
-        >
-          <div class="message-card">
-            <div class="meta">
-              <span class="tag" v-if="msg.sender !== 'user'">Assistant</span>
-              <span class="tag alt" v-else>User</span>
-              <span class="time">{{ new Date(msg.timestamp || Date.now()).toLocaleTimeString() }}</span>
-            </div>
-            <div class="body">
-              <template v-if="msg.sender !== 'user'">
-                <div class="markdown" v-html="renderMarkdownHtml(msg.text)"></div>
-              </template>
-              <pre v-else class="plain-text">{{ msg.text }}</pre>
+          <div
+            v-for="msg in messages"
+            :key="`${msg.id}-${msg.text?.length || 0}`"
+            class="message"
+            :class="msg.sender || 'assistant'"
+          >
+            <div class="message-card">
+              <div class="meta">
+                <span class="tag" v-if="msg.sender !== 'user'">Assistant</span>
+                <span class="tag alt" v-else>User</span>
+                <span class="time">{{ new Date(msg.timestamp || Date.now()).toLocaleTimeString() }}</span>
+              </div>
+              <div class="body">
+                <template v-if="msg.sender !== 'user'">
+                  <div class="markdown" v-html="renderMarkdownHtml(msg.text)"></div>
+                </template>
+                <pre v-else class="plain-text">{{ msg.text }}</pre>
+              </div>
             </div>
           </div>
-        </div>
-        <div v-if="isLoading" class="loading">
-          <div class="spinner"></div>
-          생성 중...
+          <div v-if="isLoading" class="loading">
+            <div class="spinner"></div>
+            생성 중...
+          </div>
         </div>
       </div>
     </div>
@@ -329,27 +331,59 @@ watch(selectedRunId, () => {
 <style scoped>
 .response-panel.split {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   flex: 1;
   height: 100%;
   min-height: 0;
   overflow: hidden;
   background: transparent;
   color: #e6ecff;
-  gap: 16px;
+  gap: 12px;
   box-sizing: border-box;
 }
 
+.answer-detail {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+.answer-detail.combined {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  padding: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.answer-body {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 12px;
+  padding: 0 12px 12px 12px;
+  flex: 1;
+  min-height: 0;
+  align-items: stretch;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
 .answer-list {
-  width: 260px;
-  min-width: 220px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 14px;
-  padding: 14px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .answer-list-header {
@@ -403,15 +437,15 @@ watch(selectedRunId, () => {
   color: rgba(230, 236, 255, 0.5);
 }
 
-.answer-detail {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
+.answer-content {
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 16px;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
   overflow: hidden;
+  min-height: 0;
 }
 
 .response-header {
@@ -487,6 +521,7 @@ watch(selectedRunId, () => {
   gap: 12px;
   background: rgba(255, 255, 255, 0.01);
   box-sizing: border-box;
+  height: 100%;
 }
 
 .empty {
