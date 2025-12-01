@@ -6,6 +6,7 @@ from routes import router
 from routes import openai
 from routes import gemini
 from routes import prompts
+from routes import chat_unified
 
 # 로깅 설정
 logging.basicConfig(
@@ -34,6 +35,7 @@ app.include_router(router)
 app.include_router(openai.router)
 app.include_router(gemini.router)
 app.include_router(prompts.router)
+app.include_router(chat_unified.router)
 
 
 @app.get("/")

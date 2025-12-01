@@ -17,9 +17,8 @@ class ChatRequest(BaseModel):
     message: str
     history: List[Message] = []
     model: Optional[str] = None
-    prompt_key: Optional[str] = "prompt"
-    system_prompt: Optional[str] = None
-    model_info: Optional[Dict[str, Any]] = None
+    prompt: Optional[str] = None
+    model_version: Optional[str] = None
     input_title: Optional[str] = None
 
 
@@ -46,10 +45,9 @@ async def prompt_chat(request: ChatRequest):
             async for chunk in gemini_service_prompt.chat(
                 request.message,
                 history,
-                prompt_key=request.prompt_key,
                 model=request.model,
-                system_prompt=request.system_prompt,
-                model_info=request.model_info,
+                prompt=request.prompt,
+                model_version=request.model_version,
                 input_title=request.input_title
             ):
                 yield chunk

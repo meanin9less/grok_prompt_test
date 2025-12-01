@@ -37,11 +37,7 @@ provide('g_isStreaming', g_isStreaming)
 
 const responsePanelRef = ref(null)
 
-const providerApiPath = computed(() => {
-  if (g_selectedProvider.value === 'gpt' || g_selectedProvider.value === 'gpt-o1') return '/api/openai/prompt-chat'
-  if (g_selectedProvider.value === 'gemini' || g_selectedProvider.value === 'gemini-flash') return '/api/gemini/prompt-chat'
-  return '/api/grok/prompt-chat'
-})
+const providerApiPath = computed(() => '/api/chat/prompt-chat')
 
 const subModelOptions = computed(() => {
   const family = modelFamilies.find((item) => item.id === g_selectedProvider.value)
@@ -131,7 +127,9 @@ const handleUpdateInput = (prompt) => {
           :disabled="g_isStreaming || !readyForRun"
           @click="handleExecute"
         >
-          AI 답변 시작
+          AI
+          답변
+          시작
         </button>
       </section>
 
@@ -139,10 +137,10 @@ const handleUpdateInput = (prompt) => {
         <ResponseStreamPanel
           ref="responsePanelRef"
           :api-path="providerApiPath"
-          :selected-model="g_selectedModel"
+          :model="g_selectedProvider"
+          :model-version="g_selectedModel"
           :system-prompt="g_selectedSystemPrompt"
           :input-prompt="g_selectedInputPrompt"
-          :model-info="{ provider: g_selectedProvider, model: g_selectedModel }"
           @stream-state-change="handleStreamState"
         />
       </section>
@@ -245,7 +243,7 @@ const handleUpdateInput = (prompt) => {
 
 .studio-layout {
   display: grid;
-  grid-template-columns: 1.6fr 0.65fr 1.1fr;
+  grid-template-columns: 1fr 0.3fr 1fr;
   gap: 18px;
   flex: 1;
   height: 100%;
@@ -274,7 +272,7 @@ const handleUpdateInput = (prompt) => {
   align-self: center;
   justify-self: center;
   width: 100%;
-  max-width: 200px;
+  max-width: 110px;
   padding: 0;
   display: flex;
   align-items: center;
@@ -367,7 +365,7 @@ const handleUpdateInput = (prompt) => {
   align-self: center;
   justify-self: center;
   width: 100%;
-  max-width: 200px;
+  max-width: 110px;
   padding: 0;
   display: flex;
   align-items: center;
@@ -375,20 +373,20 @@ const handleUpdateInput = (prompt) => {
 }
 
 .run-button {
-  padding: 14px 20px;
+  padding: 10px 14px;
   border: none;
   border-radius: 12px;
   background: linear-gradient(135deg, #63b3ff 0%, #63ffdd 100%);
   color: #0b1221;
   font-weight: 700;
-  font-size: 14px;
+  font-size: 13px;
   cursor: pointer;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   width: 100%;
 }
 
 .run-button.center-only {
-  max-width: 220px;
+  max-width: 140px;
 }
 
 .run-button:hover:not(:disabled) {
@@ -404,7 +402,7 @@ const handleUpdateInput = (prompt) => {
 .right-panel {
   padding: 0;
   min-height: 0;
-  min-width: 260px;
+  min-width: 280px;
 }
 
 .left-panel :deep(.prompt-manager) {
