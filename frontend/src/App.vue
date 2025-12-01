@@ -127,9 +127,9 @@ const handleUpdateInput = (prompt) => {
           :disabled="g_isStreaming || !readyForRun"
           @click="handleExecute"
         >
-          AI
-          답변
-          시작
+          <span>AI</span>
+          <span>답변</span>
+          <span>시작 ➜</span>
         </button>
       </section>
 
@@ -157,7 +157,7 @@ const handleUpdateInput = (prompt) => {
   overflow: hidden;
   background: radial-gradient(circle at 20% 20%, #1e2638, #0a0f1d 60%);
   color: #e5e9f5;
-  padding: 24px;
+  padding: 32px;
   box-sizing: border-box;
 }
 
@@ -243,8 +243,8 @@ const handleUpdateInput = (prompt) => {
 
 .studio-layout {
   display: grid;
-  grid-template-columns: 1fr 0.3fr 1fr;
-  gap: 18px;
+  grid-template-columns: 1fr 0.2fr 1fr;
+  gap: 12px;
   flex: 1;
   height: 100%;
   min-height: 0;
@@ -272,7 +272,7 @@ const handleUpdateInput = (prompt) => {
   align-self: center;
   justify-self: center;
   width: 100%;
-  max-width: 110px;
+  max-width: 90px;
   padding: 0;
   display: flex;
   align-items: center;
@@ -365,7 +365,7 @@ const handleUpdateInput = (prompt) => {
   align-self: center;
   justify-self: center;
   width: 100%;
-  max-width: 110px;
+  max-width: 90px;
   padding: 0;
   display: flex;
   align-items: center;
@@ -373,20 +373,39 @@ const handleUpdateInput = (prompt) => {
 }
 
 .run-button {
-  padding: 10px 14px;
-  border: none;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #63b3ff 0%, #63ffdd 100%);
+  padding: 10px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 16px;
+  background: linear-gradient(160deg, #63b3ff 0%, #63ffdd 100%);
   color: #0b1221;
-  font-weight: 700;
+  font-weight: 800;
   font-size: 13px;
+  letter-spacing: 0.04em;
   cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  text-align: center;
+  line-height: 1.15;
+  min-height: 90px;
+  box-shadow: 0 12px 30px rgba(99, 179, 255, 0.35);
+}
+
+.run-button span {
+  display: block;
+  padding: 1px 0;
+}
+
+.run-button span:last-child {
+  font-size: 12px;
 }
 
 .run-button.center-only {
-  max-width: 140px;
+  max-width: 120px;
 }
 
 .run-button:hover:not(:disabled) {

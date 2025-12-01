@@ -27,6 +27,17 @@ async def prompt_chat(request: ChatRequest):
     if not request.message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
+    # 입력값 로깅
+    print(f"\n{'='*60}")
+    print(f"[Chat Request]")
+    print(f"Message: {request.message}")
+    print(f"Model: {request.model}")
+    print(f"Model Version: {request.model_version}")
+    print(f"Prompt: {request.prompt[:100] if request.prompt else 'None'}{'...' if request.prompt and len(request.prompt) > 100 else ''}")
+    print(f"Input Title: {request.input_title}")
+    print(f"History Count: {len(request.history)}")
+    print(f"{'='*60}\n")
+
     provider = (request.model or "").lower()
     version_lower = (request.model_version or "").lower()
 

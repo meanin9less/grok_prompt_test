@@ -28,29 +28,46 @@ const props = defineProps({
 const emit = defineEmits(['stream-state-change'])
 
 // 상태 관리
-const autoScrollEnabled = ref(true)
 const runs = ref([])
 const selectedRunId = ref(null)
 const metaModalOpen = ref(false)
 const isLoading = ref(false)
 const messagesContainer = ref(null)
 const currentMessage = ref('')
+const messages = ref([])
+const setMessagesContainer = (el) => {
+  // 방어적으로 ref null 접근을 피함
+  if (!messagesContainer) return
+  messagesContainer.value = el
+}
 
 const { parseMarkdown } = useChatMarkdown()
 const renderMarkdown = (text) => {
+  const str = String(text ?? '')
   try {
-    return parseMarkdown(String(text ?? ''))
+    const html = parseMarkdown(str)
+    return { html, plain: str }
   } catch (err) {
-    return `<div style="color: red;">Error rendering</div>`
+    console.warn('Markdown parse failed', err)
+    return { html: '', plain: str }
   }
 }
 
-const STORAGE_KEY_RUNS = 'studio_response_runs'
+const escapeHtml = (str) =>
+  String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\"/g, '&quot;')
+    .replace(/'/g, '&#39;')
 
-const headerModelName = computed(() => {
-  const run = runs.value.find((r) => r.id === selectedRunId.value)
-  return run?.modelVersion || props.modelVersion || '모델 미선택'
-})
+const renderMarkdownHtml = (text) => {
+  const rendered = renderMarkdown(text)
+  if (rendered.html && rendered.html.trim()) return rendered.html
+  return escapeHtml(rendered.plain).replace(/\n/g, '<br>')
+}
+
+const STORAGE_KEY_RUNS = 'studio_response_runs'
 
 const selectedRun = computed(() => runs.value.find((r) => r.id === selectedRunId.value) || null)
 
@@ -98,7 +115,6 @@ const selectRun = (id) => {
 }
 
 const scrollToBottom = async () => {
-  if (!autoScrollEnabled.value) return
   await nextTick()
   if (messagesContainer.value) {
     messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
@@ -129,6 +145,7 @@ const runExecution = (systemPrompt, inputPrompt, generationOptions) => {
   runs.value = [run, ...runs.value]
   selectedRunId.value = runId
   currentMessage.value = ''
+  messages.value = []
   isLoading.value = true
   emit('stream-state-change', true)
   persistRuns()
@@ -142,8 +159,28 @@ const sendMessageStream = async (inputText, run, systemPrompt) => {
     const { sendMessage } = await import('../services/grokApi')
     const apiPath = typeof props.apiPath === 'object' && 'value' in props.apiPath ? props.apiPath.value : props.apiPath
 
+    // 어시스턴트 메시지 초기화
+    const assistantMessageId = Date.now()
+    messages.value = [
+      {
+        id: assistantMessageId,
+        text: '',
+        sender: 'assistant',
+        timestamp: new Date()
+      }
+    ]
+
     await sendMessage(inputText, (chunk) => {
-      currentMessage.value += chunk
+      const strChunk = String(chunk ?? '')
+      currentMessage.value = `${currentMessage.value}${strChunk}`
+      // 메시지 배열 업데이트
+      const idx = messages.value.findIndex((m) => m.id === assistantMessageId)
+      if (idx !== -1) {
+        const updated = { ...messages.value[idx], text: currentMessage.value }
+        const clone = [...messages.value]
+        clone.splice(idx, 1, updated)
+        messages.value = clone
+      }
 
       // run 데이터 업데이트
       const runIndex = runs.value.findIndex(r => r.id === run.id)
@@ -162,11 +199,13 @@ const sendMessageStream = async (inputText, run, systemPrompt) => {
   } finally {
     isLoading.value = false
     emit('stream-state-change', false)
+    await scrollToBottom()
   }
 }
 
 const clearMessages = () => {
   currentMessage.value = ''
+  messages.value = []
 }
 
 defineExpose({
@@ -177,6 +216,9 @@ loadRuns()
 watch(selectedRunId, () => {
   const run = runs.value.find((r) => r.id === selectedRunId.value)
   currentMessage.value = run?.responseText || ''
+  messages.value = run?.responseText
+    ? [{ id: run.id, text: run.responseText, sender: 'assistant', timestamp: new Date(run.createdAt || Date.now()) }]
+    : []
 })
 </script>
 
@@ -185,8 +227,7 @@ watch(selectedRunId, () => {
     <aside class="answer-list">
       <div class="answer-list-header">
         <div>
-          <p class="eyebrow">답변 리스트</p>
-          <h3>실행 이력</h3>
+          <h3>답변 이력</h3>
         </div>
         <button class="ghost-btn xs" @click="runs = []; persistRuns(); clearMessages()">초기화</button>
       </div>
@@ -204,47 +245,67 @@ watch(selectedRunId, () => {
           </div>
           <p class="tiny">{{ new Date(run.createdAt).toLocaleTimeString() }}</p>
         </div>
-        <div v-if="!runs.length" class="empty">실행 이력이 없습니다.</div>
+        <div v-if="!runs.length" class="empty">답변 이력이 없습니다.</div>
       </div>
     </aside>
 
     <div class="answer-detail">
       <header class="response-header">
         <div>
-          <p class="eyebrow">{{ selectedRun?.title || '선택된 실행 없음' }}</p>
-          <h3>{{ headerModelName }}</h3>
+          <h3>{{ selectedRun?.title || 'AI 응답' }}</h3>
           <p class="status-line">
-            {{ isLoading ? '생성 중...' : '대기 중' }}
+            {{ selectedRun?.modelVersion || '모델 미선택' }} · {{ isLoading ? '생성 중...' : '대기 중' }}
           </p>
         </div>
         <div class="header-actions">
           <span class="pill">{{ selectedRun?.inputType === 'form' ? '폼 입력' : '텍스트 입력' }}</span>
           <button class="ghost-btn" @click="metaModalOpen = true" :disabled="!selectedRun">입력/프롬프트 보기</button>
-          <button class="ghost-btn" @click="clearMessages" :disabled="isLoading">Clear</button>
         </div>
       </header>
 
-      <div class="toolbar">
-        <div class="badge">Auto Scroll: {{ autoScrollEnabled ? 'ON' : 'OFF' }}</div>
-        <div class="toolbar-actions">
-          <button class="ghost-btn xs" @click="autoScrollEnabled = !autoScrollEnabled">토글</button>
-          <button class="ghost-btn xs" @click="messagesContainer && (messagesContainer.scrollTop = 0)">Top</button>
-          <button class="ghost-btn xs" @click="messagesContainer && (messagesContainer.scrollTop = messagesContainer.scrollHeight)">Bottom</button>
+      <div class="stream-area" :ref="setMessagesContainer">
+        <div v-if="!messages.length" class="empty">
+          <div class="empty-card">
+            <div class="step">
+              <span class="step-badge">1</span>
+              <div>
+                <p class="step-title">입력 값 설정</p>
+                <p class="step-desc">텍스트 혹은 폼을 선택·작성해 주세요.</p>
+              </div>
+            </div>
+            <div class="step">
+              <span class="step-badge">2</span>
+              <div>
+                <p class="step-title">프롬프트 선택</p>
+                <p class="step-desc">좌측에서 사용할 프롬프트를 고릅니다.</p>
+              </div>
+            </div>
+            <div class="step">
+              <span class="step-badge">3</span>
+              <div>
+                <p class="step-title">AI 답변 시작</p>
+                <p class="step-desc">센터의 버튼을 눌러 스트리밍을 확인하세요.</p>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
-
-      <div class="stream-area" :ref="(el) => (messagesContainer = el)">
-        <div v-if="!currentMessage" class="empty">
-          응답 없음. 모델을 선택하고 실행해주세요.
-        </div>
-        <div v-if="currentMessage" class="message assistant">
+        <div
+          v-for="msg in messages"
+          :key="`${msg.id}-${msg.text?.length || 0}`"
+          class="message"
+          :class="msg.sender || 'assistant'"
+        >
           <div class="message-card">
             <div class="meta">
-              <span class="tag">Assistant</span>
-              <span class="time">{{ new Date().toLocaleTimeString() }}</span>
+              <span class="tag" v-if="msg.sender !== 'user'">Assistant</span>
+              <span class="tag alt" v-else>User</span>
+              <span class="time">{{ new Date(msg.timestamp || Date.now()).toLocaleTimeString() }}</span>
             </div>
             <div class="body">
-              <div class="markdown" v-html="renderMarkdown(currentMessage)"></div>
+              <template v-if="msg.sender !== 'user'">
+                <div class="markdown" v-html="renderMarkdownHtml(msg.text)"></div>
+              </template>
+              <pre v-else class="plain-text">{{ msg.text }}</pre>
             </div>
           </div>
         </div>
@@ -425,27 +486,6 @@ watch(selectedRunId, () => {
   cursor: not-allowed;
 }
 
-.toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 18px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-  background: rgba(255, 255, 255, 0.01);
-}
-
-.badge {
-  padding: 6px 10px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.08);
-  font-size: 12px;
-}
-
-.toolbar-actions {
-  display: flex;
-  gap: 6px;
-}
-
 .ghost-btn.xs {
   padding: 8px 10px;
   font-size: 11px;
@@ -468,6 +508,55 @@ watch(selectedRunId, () => {
   text-align: center;
   color: rgba(230, 236, 255, 0.6);
   padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-height: 100%;
+}
+
+.empty-card {
+  display: grid;
+  gap: 12px;
+  text-align: left;
+  max-width: 520px;
+  margin: 0 auto;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.step {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+.step-badge {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #63b3ff, #63ffdd);
+  color: #0b1221;
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.step-title {
+  margin: 0;
+  font-weight: 700;
+  color: #e6ecff;
+}
+
+.step-desc {
+  margin: 2px 0 0;
+  color: rgba(230, 236, 255, 0.7);
+  font-size: 12px;
 }
 
 .message {
