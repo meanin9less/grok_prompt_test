@@ -992,6 +992,8 @@ onMounted(() => {
 .field textarea,
 .field select {
   width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   border-radius: 10px;
   border: 1px solid rgba(99, 179, 255, 0.2);
   background: rgba(255, 255, 255, 0.05);
@@ -1102,6 +1104,8 @@ onMounted(() => {
   flex-direction: column;
   gap: 14px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  overflow: auto;
+  box-sizing: border-box;
 }
 
 .template-layout {
@@ -1110,6 +1114,7 @@ onMounted(() => {
   gap: 12px;
   min-height: 0;
   height: 100%;
+  min-width: 0;
 }
 
 .template-list {
@@ -1120,6 +1125,7 @@ onMounted(() => {
   flex-direction: column;
   gap: 8px;
   overflow-y: auto;
+  min-width: 0;
 }
 
 .template-item {
@@ -1153,6 +1159,7 @@ onMounted(() => {
   color: #e6ecff;
   min-height: 320px;
   max-height: 70vh;
+  min-width: 0;
 }
 
 .field-row {

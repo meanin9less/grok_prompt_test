@@ -697,6 +697,9 @@ watch(selectedRunId, () => {
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
   padding: 16px;
   color: #e6ecff;
+  max-height: 80vh;
+  overflow: auto;
+  box-sizing: border-box;
 }
 
 .modal-header {
@@ -710,6 +713,8 @@ watch(selectedRunId, () => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  max-height: calc(80vh - 120px);
+  overflow: auto;
 }
 
 .modal-section {
