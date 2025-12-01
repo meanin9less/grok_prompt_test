@@ -25,12 +25,11 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['stream-state-change'])
+const emit = defineEmits(['stream-state-change', 'meta-toggle'])
 
 // 상태 관리
 const runs = ref([])
 const selectedRunId = ref(null)
-const metaModalOpen = ref(false)
 const isLoading = ref(false)
 const messagesContainer = ref(null)
 const currentMessage = ref('')
@@ -39,6 +38,14 @@ const setMessagesContainer = (el) => {
   // 방어적으로 ref null 접근을 피함
   if (!messagesContainer) return
   messagesContainer.value = el
+}
+
+const openMeta = () => {
+  emit('meta-toggle', { open: true, run: selectedRun.value })
+}
+
+const closeMeta = () => {
+  emit('meta-toggle', { open: false, run: selectedRun.value })
 }
 
 const { parseMarkdown } = useChatMarkdown()
@@ -79,7 +86,7 @@ const loadRuns = () => {
   try {
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY_RUNS) || '[]')
     runs.value = Array.isArray(stored) ? stored : []
-    selectedRunId.value = runs.value[0]?.id || null
+    selectedRunId.value = null
   } catch (err) {
     runs.value = []
     selectedRunId.value = null
@@ -220,6 +227,7 @@ watch(selectedRunId, () => {
     ? [{ id: run.id, text: run.responseText, sender: 'assistant', timestamp: new Date(run.createdAt || Date.now()) }]
     : []
 })
+
 </script>
 
 <template>
@@ -259,7 +267,7 @@ watch(selectedRunId, () => {
         </div>
         <div class="header-actions">
           <span class="pill">{{ selectedRun?.inputType === 'form' ? '폼 입력' : '텍스트 입력' }}</span>
-          <button class="ghost-btn" @click="metaModalOpen = true" :disabled="!selectedRun">입력/프롬프트 보기</button>
+          <button class="ghost-btn" @click="openMeta" :disabled="!selectedRun">입력/프롬프트 보기</button>
         </div>
       </header>
 
@@ -312,29 +320,6 @@ watch(selectedRunId, () => {
         <div v-if="isLoading" class="loading">
           <div class="spinner"></div>
           생성 중...
-        </div>
-      </div>
-    </div>
-
-    <div v-if="metaModalOpen" class="modal-backdrop" @click.self="metaModalOpen = false">
-      <div class="modal">
-        <div class="modal-header">
-          <h4>입력정보 / 프롬프트</h4>
-          <button class="ghost-btn xs" @click="metaModalOpen = false">닫기</button>
-        </div>
-        <div class="modal-body">
-          <section class="modal-section">
-            <p class="eyebrow">사용된 입력</p>
-            <p class="modal-text">{{ selectedRun?.userPreview || '입력정보 없음' }}</p>
-          </section>
-          <section class="modal-section">
-            <p class="eyebrow">모델</p>
-            <p class="modal-text">{{ selectedRun?.modelVersion || '모델 미선택' }}</p>
-          </section>
-          <section class="modal-section">
-            <p class="eyebrow">프롬프트 내용</p>
-            <pre class="modal-pre">{{ selectedRun?.promptContent || '프롬프트가 비어 있습니다.' }}</pre>
-          </section>
         </div>
       </div>
     </div>
@@ -676,45 +661,20 @@ watch(selectedRunId, () => {
   font-weight: 700;
 }
 
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(5, 8, 18, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 30;
-  padding: 20px;
-  box-sizing: border-box;
+.drawer-backdrop {
+  display: none;
 }
 
-.modal {
-  width: 520px;
-  max-width: 100%;
-  background: rgba(14, 18, 30, 0.95);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
-  padding: 16px;
-  color: #e6ecff;
-  max-height: 80vh;
-  overflow: auto;
-  box-sizing: border-box;
+.drawer-panel {
+  display: none;
 }
 
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
+.drawer-header {
+  display: none;
 }
 
-.modal-body {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  max-height: calc(80vh - 120px);
-  overflow: auto;
+.drawer-body {
+  display: none;
 }
 
 .modal-section {
@@ -739,6 +699,15 @@ watch(selectedRunId, () => {
   white-space: pre-wrap;
   max-height: 240px;
   overflow: auto;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
 }
 
 @media (max-width: 1100px) {

@@ -450,21 +450,25 @@ onMounted(() => {
   loadPrompts()
   loadTemplates()
   loadSystemPrompts()
-  if (!state.selectedSystemId && state.systemPrompts.length) {
-    state.selectedSystemId = state.systemPrompts[0].id
-    state.systemDraft = { ...state.systemPrompts[0] }
-    emit('update:system', state.systemPrompts[0])
-  }
 })
 </script>
 
 <template>
-  <div class="prompt-manager">
-    <div class="list-pane">
-      <div class="tab-row">
-        <button
-          class="tab-btn"
-          :class="{ active: state.activeTab === 'text' }"
+    <div class="prompt-manager">
+    <div class="system-toolbar">
+      <div>
+        <p class="selected-badge" v-if="selectedSystem">선택된 프롬프트</p>
+        <h3 class="meta-title">{{ selectedSystem?.title || '프롬프트를 선택하세요.' }}</h3>
+      </div>
+      <div class="system-actions">
+        <button class="ghost-btn" @click="openSystemModal">프롬프트 관리</button>
+      </div>
+    </div>
+      <div class="list-pane">
+        <div class="tab-row">
+          <button
+            class="tab-btn"
+            :class="{ active: state.activeTab === 'text' }"
           @click="state.activeTab = 'text'"
         >
           텍스트
@@ -494,15 +498,6 @@ onMounted(() => {
     </div>
 
     <div class="detail-pane">
-      <div class="system-box">
-        <div>
-          <p class="selected-badge" v-if="selectedSystem">선택된 프롬프트</p>
-          <h3 class="meta-title">{{ selectedSystem?.title || '프롬프트를 선택하세요.' }}</h3>
-        </div>
-        <div class="system-actions">
-          <button class="ghost-btn" @click="openSystemModal">프롬프트 관리</button>
-        </div>
-      </div>
       <div class="detail-header">
         <div>
           <p class="eyebrow">{{ detailEyebrow }}</p>
@@ -748,12 +743,34 @@ onMounted(() => {
 .prompt-manager {
   display: grid;
   grid-template-columns: 0.9fr 1.6fr;
-  gap: 12px;
+  grid-template-rows: auto 1fr;
+  gap: 10px;
   color: #e6ecff;
   height: 100%;
   min-height: 0;
   overflow: hidden;
   box-sizing: border-box;
+}
+
+.system-toolbar {
+  min-height: 44px;
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.system-toolbar .meta-title {
+  margin: 2px 0 0;
+}
+
+.system-toolbar .system-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .list-pane {
@@ -776,19 +793,6 @@ onMounted(() => {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-}
-
-
-.system-box {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  margin-bottom: 10px;
 }
 
 

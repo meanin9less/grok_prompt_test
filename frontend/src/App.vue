@@ -2,6 +2,7 @@
 import { computed, provide, ref, watch } from 'vue'
 import PromptManagerPanel from './components/PromptManagerPanel.vue'
 import ResponseStreamPanel from './components/ResponseStreamPanel.vue'
+import MetaDrawer from './components/MetaDrawer.vue'
 
 const g_selectedSystemPrompt = ref(null)
 const g_selectedInputPrompt = ref(null)
@@ -14,17 +15,19 @@ const g_generationOptions = ref({
   topP: 0.95,
   systemOverride: ''
 })
+const g_metaOpen = ref(false)
+const g_metaData = ref(null)
 
 const modelFamilies = [
   {
     id: 'gpt',
     label: 'ChatGPT',
-    subModels: ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4o', 'gpt-3.5-turbo']
+    subModels: ['gpt-5.1', 'gpt-5.1-codex', 'gpt-5-mini', 'gpt-5-nano', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4o', 'gpt-3.5-turbo']
   },
   {
     id: 'gemini',
     label: 'Gemini',
-    subModels: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro']
+    subModels: ['gemini-3-pro-preview', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro']
   },
   {
     id: 'grok',
@@ -80,6 +83,15 @@ const handleStreamState = (isStreaming) => {
 const handleUpdateInput = (prompt) => {
   g_selectedInputPrompt.value = prompt
 }
+
+const handleMetaToggle = (payload) => {
+  if (typeof payload === 'object' && payload !== null) {
+    g_metaOpen.value = Boolean(payload.open)
+    g_metaData.value = payload.run || g_metaData.value
+  } else {
+    g_metaOpen.value = Boolean(payload)
+  }
+}
 </script>
 
 <template>
@@ -97,10 +109,10 @@ const handleUpdateInput = (prompt) => {
     </header>
 
     <main class="studio-layout">
-      <section class="panel left-panel" :class="{ locked: g_isStreaming }">
+      <section class="panel left-panel" :class="{ locked: g_isStreaming, covered: g_metaOpen }">
         <div class="panel-header">
           <div class="panel-title">
-            <h2>입력정보</h2>
+            <h2>입력 정보</h2>
           </div>
           <div class="model-selects">
             <select v-model="g_selectedProvider">
@@ -119,6 +131,15 @@ const handleUpdateInput = (prompt) => {
         <div class="left-body">
           <PromptManagerPanel @update:input="handleUpdateInput" @update:system="(p) => (g_selectedSystemPrompt = p)" />
         </div>
+        <MetaDrawer
+          v-if="g_metaOpen"
+          :title="g_metaData?.title"
+          :model="g_metaData?.modelVersion"
+          :input-preview="g_metaData?.userPreview"
+          :prompt-content="g_metaData?.promptContent"
+          :input-type="g_metaData?.inputType"
+          @close="handleMetaToggle({ open: false })"
+        />
       </section>
 
       <section class="panel center-panel" :class="{ locked: g_isStreaming }">
@@ -142,6 +163,7 @@ const handleUpdateInput = (prompt) => {
           :system-prompt="g_selectedSystemPrompt"
           :input-prompt="g_selectedInputPrompt"
           @stream-state-change="handleStreamState"
+          @meta-toggle="handleMetaToggle"
         />
       </section>
     </main>
@@ -349,6 +371,11 @@ const handleUpdateInput = (prompt) => {
 .left-panel {
   padding: 0;
   min-width: 280px;
+  position: relative;
+}
+
+.left-panel.hidden {
+  display: none;
 }
 
 .left-body {
@@ -427,6 +454,30 @@ const handleUpdateInput = (prompt) => {
 .left-panel :deep(.prompt-manager) {
   padding: 14px;
   height: 100%;
+}
+
+.left-panel.covered {
+  overflow: hidden;
+}
+
+.left-panel.covered .left-body,
+.left-panel.covered .panel-header {
+  opacity: 0.25;
+  pointer-events: none;
+  filter: blur(1px);
+}
+
+.left-panel.covered::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(5, 8, 18, 0.4);
+  z-index: 1;
+  pointer-events: none;
+}
+
+.studio-layout.drawer-open {
+  grid-template-columns: 0px 0.2fr 1fr;
 }
 
 @media (max-width: 1200px) {
