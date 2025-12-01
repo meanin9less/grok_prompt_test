@@ -49,16 +49,6 @@ const closeMeta = () => {
 }
 
 const { parseMarkdown } = useChatMarkdown()
-const renderMarkdown = (text) => {
-  const str = String(text ?? '')
-  try {
-    const html = parseMarkdown(str)
-    return { html, plain: str }
-  } catch (err) {
-    console.warn('Markdown parse failed', err)
-    return { html: '', plain: str }
-  }
-}
 
 const escapeHtml = (str) =>
   String(str ?? '')
@@ -69,9 +59,12 @@ const escapeHtml = (str) =>
     .replace(/'/g, '&#39;')
 
 const renderMarkdownHtml = (text) => {
-  const rendered = renderMarkdown(text)
-  if (rendered.html && rendered.html.trim()) return rendered.html
-  return escapeHtml(rendered.plain).replace(/\n/g, '<br>')
+  const str = String(text ?? '')
+  if (!str) return ''
+
+  const html = parseMarkdown(str)
+  if (html && html.trim()) return html
+  return escapeHtml(str).replace(/\n/g, '<br>')
 }
 
 const STORAGE_KEY_RUNS = 'studio_response_runs'
@@ -180,7 +173,7 @@ const sendMessageStream = async (inputText, run, systemPrompt) => {
     await sendMessage(inputText, (chunk) => {
       const strChunk = String(chunk ?? '')
       currentMessage.value = `${currentMessage.value}${strChunk}`
-      // 메시지 배열 업데이트
+      // 메시지 배열 업데이트 - 실시간으로 마크다운 렌더링
       const idx = messages.value.findIndex((m) => m.id === assistantMessageId)
       if (idx !== -1) {
         const updated = { ...messages.value[idx], text: currentMessage.value }
@@ -636,6 +629,7 @@ watch(selectedRunId, () => {
   word-break: break-word; /* 긴 단어 자동 줄바꿈 */
   overflow-wrap: break-word;
   box-sizing: border-box;
+  white-space: pre-wrap; /* 스트리밍 중 줄바꿈 유지 */
 }
 .markdown pre {
   max-width: 100%;
@@ -648,6 +642,12 @@ watch(selectedRunId, () => {
   word-break: break-word;
 }
 
+.plain-text {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  word-break: break-word;
+  color: rgba(230, 236, 255, 0.88);
+}
 
 .footer {
   display: flex;

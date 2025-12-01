@@ -69,6 +69,9 @@ class OpenAIServicePrompt:
                                 delta = data["choices"][0].get("delta", {})
                                 content = delta.get("content", "")
                                 if content:
+                                    # 줄바꿈 문자 처리 (escaped \n을 실제 줄바꿈으로 변환)
+                                    content = content.replace("\\n", "\n")
+                                    logger.debug(f"[OpenAI Chunk] {repr(content[:50])}")
                                     yield f"data: {content}\n\n"
                         except json.JSONDecodeError:
                             continue

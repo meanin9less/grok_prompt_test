@@ -262,6 +262,59 @@ const startTemplateCreate = () => {
   resetTemplateDraft()
 }
 
+const startTemplateEdit = () => {
+  if (!state.selectedTemplateId) return
+  state.templateMode = 'edit'
+}
+
+const cancelTemplateEditOrCreate = () => {
+  if (state.templateMode === 'create') {
+    if (state.templates.length) {
+      const first = state.templates[0]
+      state.selectedTemplateId = first.id
+      state.templateDraft = {
+        name: first.name,
+        fields: first.fields ? first.fields.map((f) => ({ ...f })) : []
+      }
+      state.templateMode = 'view'
+    } else {
+      resetTemplateDraft()
+      state.templateMode = 'view'
+    }
+    return
+  }
+
+  if (state.templateMode === 'edit') {
+    const current = state.templates.find((t) => t.id === state.selectedTemplateId)
+    if (current) {
+      state.templateDraft = {
+        name: current.name,
+        fields: current.fields ? current.fields.map((f) => ({ ...f })) : []
+      }
+    }
+    state.templateMode = 'view'
+  }
+}
+
+const deleteTemplate = () => {
+  if (!state.selectedTemplateId) return
+  if (!confirm('삭제하시겠습니까?')) return
+  state.templates = state.templates.filter((t) => t.id !== state.selectedTemplateId)
+  persistTemplates()
+  if (state.templates.length) {
+    state.selectedTemplateId = state.templates[0].id
+    state.templateDraft = {
+      name: state.templates[0].name,
+      fields: state.templates[0].fields ? state.templates[0].fields.map((f) => ({ ...f })) : []
+    }
+    state.templateMode = 'view'
+  } else {
+    state.selectedTemplateId = null
+    resetTemplateDraft()
+    state.templateMode = 'create'
+  }
+}
+
 const addTemplateField = () => {
   state.templateDraft.fields = [...state.templateDraft.fields, { label: '', placeholder: '' }]
 }
@@ -680,6 +733,13 @@ onMounted(() => {
           </div>
           <div class="header-actions">
             <button class="ghost-btn" @click="startTemplateCreate">+ 템플릿 추가</button>
+            <button
+              class="ghost-btn"
+              v-if="state.templateMode === 'view' && state.selectedTemplateId"
+              @click="startTemplateEdit"
+            >
+              수정
+            </button>
             <button class="ghost-btn" @click="closeTemplateModal">닫기</button>
           </div>
         </div>
@@ -700,12 +760,16 @@ onMounted(() => {
           <div class="template-detail">
             <div class="field">
               <label>템플릿 이름</label>
-              <input v-model="state.templateDraft.name" placeholder="템플릿 이름" />
+              <input
+                v-model="state.templateDraft.name"
+                placeholder="템플릿 이름"
+                :disabled="state.templateMode === 'view'"
+              />
             </div>
             <div class="field">
               <div class="field-row">
                 <label>필드</label>
-                <button class="ghost-btn xs" @click="addTemplateField">+ 필드 추가</button>
+                <button class="ghost-btn xs" @click="addTemplateField" :disabled="state.templateMode === 'view'">+ 필드 추가</button>
               </div>
               <div class="field-list">
                 <div
@@ -713,24 +777,40 @@ onMounted(() => {
                   :key="idx"
                   class="field-card"
                 >
-                  <input v-model="field.label" placeholder="라벨" />
-                  <input v-model="field.placeholder" placeholder="예시/placeholder" />
-                  <button class="ghost-btn xs" @click="removeTemplateField(idx)">삭제</button>
+                  <input v-model="field.label" placeholder="라벨" :disabled="state.templateMode === 'view'" />
+                  <input v-model="field.placeholder" placeholder="예시/placeholder" :disabled="state.templateMode === 'view'" />
+                  <button class="ghost-btn xs" @click="removeTemplateField(idx)" :disabled="state.templateMode === 'view'">삭제</button>
                 </div>
               </div>
             </div>
             <div class="actions">
-              <button class="ghost-btn" @click="closeTemplateModal">취소</button>
               <button
+                class="ghost-btn"
+                v-if="state.templateMode === 'view' && state.selectedTemplateId"
+                @click="startTemplateEdit"
+              >
+                수정
+              </button>
+              <button class="ghost-btn" v-else @click="cancelTemplateEditOrCreate">취소</button>
+              <button
+                v-if="state.templateMode !== 'view'"
                 class="primary-btn"
                 @click="saveTemplate"
               >
                 저장
               </button>
               <button
+                class="ghost-btn danger"
+                v-if="state.templateMode !== 'create' && state.selectedTemplateId"
+                @click="deleteTemplate"
+              >
+                삭제
+              </button>
+              <button
                 class="ghost-btn"
                 @click="applyTemplate"
-                :disabled="!state.templateDraft.name"
+                :disabled="!state.templateDraft.name || state.templateMode !== 'view'"
+                v-if="state.templateMode === 'view'"
               >
                 적용
               </button>

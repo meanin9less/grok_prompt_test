@@ -44,6 +44,18 @@ export async function sendMessage(message, onChunk, apiPath = '/api/chat/prompt-
   const decoder = new TextDecoder()
   let sseBuffer = ''
 
+  const decodeChunk = (raw) => {
+    // JSON 라인이면 content/message 필드 추출, 아니면 이스케이프된 개행 복원
+    try {
+      const parsed = JSON.parse(raw)
+      const text = parsed.content || parsed.message || ''
+      if (text) return text
+    } catch (err) {
+      // not json, fall through
+    }
+    return String(raw || '').replace(/\\n/g, '\n')
+  }
+
   try {
     while (true) {
       const { done, value } = await reader.read()
@@ -65,12 +77,12 @@ export async function sendMessage(message, onChunk, apiPath = '/api/chat/prompt-
             const data = line.slice(5).trim()
             if (!data || data === '[DONE]') continue
             hasChunk = true
-            onChunk(data)
+            onChunk(decodeChunk(data))
           }
         }
       } else {
         hasChunk = true
-        onChunk(decoded)
+        onChunk(decodeChunk(decoded.trim()))
       }
     }
 
@@ -82,7 +94,7 @@ export async function sendMessage(message, onChunk, apiPath = '/api/chat/prompt-
         const data = line.slice(5).trim()
         if (!data || data === '[DONE]') continue
         hasChunk = true
-        onChunk(data)
+        onChunk(decodeChunk(data))
       }
     }
   } finally {
