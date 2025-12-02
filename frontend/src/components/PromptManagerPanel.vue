@@ -1,41 +1,75 @@
 <script setup>
 import { computed, onMounted, reactive, watch } from 'vue'
 
-const STORAGE_KEY = 'studio_input_prompts'
-const SYSTEM_KEY = 'studio_system_prompts'
-const TEMPLATE_KEY = 'studio_form_templates'
-const emit = defineEmits(['update:input', 'update:system'])
+const USER_INPUT_KEY = 'user_input_texts'
+const PROMPT_KEY = 'prompt_entries'
+
+const modelFamilies = [
+  {
+    id: 'gpt',
+    label: 'ChatGPT',
+    subModels: ['gpt-5.1', 'gpt-5.1-codex', 'gpt-5-mini', 'gpt-5-nano', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4o', 'gpt-3.5-turbo']
+  },
+  {
+    id: 'gemini',
+    label: 'Gemini',
+    subModels: ['gemini-3-pro-preview', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro']
+  },
+  {
+    id: 'grok',
+    label: 'Grok',
+    subModels: ['grok-4-1-fast-reasoning', 'grok-4-1-fast-non-reasoning', 'grok-3']
+  }
+]
+
+const DEFAULT_PROVIDER = 'grok'
+const DEFAULT_VERSION = 'grok-4-1-fast-reasoning'
+
+const emit = defineEmits(['update:input'])
 
 const state = reactive({
+  userInputs: [],
   prompts: [],
-  systemPrompts: [],
-  activeTab: 'text', // text | form
-  selectedId: null,
+  selectedInputId: null,
   detailMode: 'idle', // idle | view | create | edit
-  draft: { title: '', content: '', template: '' },
-  selectedSystemId: null,
-  systemDraft: { title: '', content: '' },
-  systemModalOpen: false,
-  systemMode: 'view', // view | create | edit
-  templates: [],
-  templateModalOpen: false,
-  selectedTemplateId: null,
-  templateMode: 'view', // view | create
-  templateDraft: { name: '', fields: [{ label: '', placeholder: '' }] },
-  formValues: []
+  draft: { title: '', text: '', model: DEFAULT_PROVIDER, version: DEFAULT_VERSION, promptId: null },
+  promptModalOpen: false,
+  promptMode: 'view', // view | create | edit
+  selectedPromptId: null,
+  promptDraft: { title: '', text: '' }
 })
+
+const loadUserInputs = () => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(USER_INPUT_KEY) || '[]')
+    state.userInputs = Array.isArray(raw)
+      ? raw.map((item) => ({
+          id: item.id || Math.random().toString(36).slice(2, 11),
+          title: item.title || '제목 없음',
+          text: item.text || item.content || '',
+          model: item.model || item.modelProvider || DEFAULT_PROVIDER,
+          version: item.version || item.modelVersion || DEFAULT_VERSION,
+          promptId: item.promptId || item.systemPromptId || null
+        }))
+      : []
+  } catch (err) {
+    state.userInputs = []
+  }
+}
+
+const persistUserInputs = () => {
+  localStorage.setItem(USER_INPUT_KEY, JSON.stringify(state.userInputs))
+}
 
 const loadPrompts = () => {
   try {
-    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
+    const raw = JSON.parse(localStorage.getItem(PROMPT_KEY) || '[]')
     state.prompts = Array.isArray(raw)
-      ? raw.map((p) => {
-          const legacyType = p.type || (p.isForm ? 'form' : 'text')
-          return {
-            ...p,
-            type: legacyType === 'form' ? 'form' : 'text'
-          }
-        })
+      ? raw.map((p) => ({
+          id: p.id || Math.random().toString(36).slice(2, 11),
+          title: p.title || '제목 없음',
+          text: p.text || p.content || ''
+        }))
       : []
   } catch (err) {
     state.prompts = []
@@ -43,767 +77,511 @@ const loadPrompts = () => {
 }
 
 const persistPrompts = () => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.prompts))
+  localStorage.setItem(PROMPT_KEY, JSON.stringify(state.prompts))
 }
-
-const loadSystemPrompts = () => {
-  try {
-    const raw = JSON.parse(localStorage.getItem(SYSTEM_KEY) || '[]')
-    state.systemPrompts = Array.isArray(raw) ? raw : []
-  } catch (err) {
-    state.systemPrompts = []
-  }
-}
-
-const persistSystemPrompts = () => {
-  localStorage.setItem(SYSTEM_KEY, JSON.stringify(state.systemPrompts))
-}
-
-const loadTemplates = () => {
-  try {
-    const raw = JSON.parse(localStorage.getItem(TEMPLATE_KEY) || '[]')
-    state.templates = Array.isArray(raw) ? raw : []
-  } catch (err) {
-    state.templates = []
-  }
-}
-
-const persistTemplates = () => {
-  localStorage.setItem(TEMPLATE_KEY, JSON.stringify(state.templates))
-}
-
-const tabPrompts = computed(() =>
-  state.prompts.filter((p) => (state.activeTab === 'form' ? p.type === 'form' : p.type !== 'form'))
-)
-
-const selectedPrompt = computed(() => state.prompts.find((p) => p.id === state.selectedId) || null)
 
 const resetDraft = () => {
-  state.draft = { title: '', content: '', template: '' }
-  state.formValues = []
+  state.draft = {
+    title: '',
+    text: '',
+    model: DEFAULT_PROVIDER,
+    version: DEFAULT_VERSION,
+    promptId: null
+  }
 }
 
-const currentTemplate = computed(() => {
-  if (!state.draft.template) return null
-  try {
-    return JSON.parse(state.draft.template)
-  } catch (err) {
-    return null
-  }
+const selectedInput = computed(() => state.userInputs.find((item) => item.id === state.selectedInputId) || null)
+const selectedPrompt = computed(() => state.prompts.find((p) => p.id === state.selectedPromptId) || null)
+
+const currentModelVersions = computed(() => {
+  const family = modelFamilies.find((item) => item.id === state.draft.model)
+  return family?.subModels || []
 })
 
-const syncFormValuesFromTemplate = (templateStr) => {
-  if (!templateStr) {
-    state.formValues = []
-    return
-  }
-  try {
-    const parsed = JSON.parse(templateStr)
-    if (Array.isArray(parsed.fields)) {
-      state.formValues = parsed.fields.map((f, idx) => ({
-        label: f.label || '',
-        placeholder: f.placeholder || '',
-        value: state.formValues?.[idx]?.value || f.value || ''
-      }))
-      return
-    }
-  } catch (err) {
-    // ignore
-  }
-  state.formValues = []
-}
+const viewModelVersions = computed(() => {
+  const provider = selectedInput.value?.model || DEFAULT_PROVIDER
+  const family = modelFamilies.find((item) => item.id === provider)
+  return family?.subModels || []
+})
 
 const detailTitle = computed(() => {
-  if (state.detailMode === 'create') return state.activeTab === 'form' ? '입력 폼 추가' : '입력정보 추가'
-  if (state.detailMode === 'edit') return state.activeTab === 'form' ? '입력 폼 수정' : '입력정보 수정'
-  if (selectedPrompt.value) return selectedPrompt.value.title
-  return state.activeTab === 'form' ? '입력 폼을 선택하세요.' : '텍스트를 선택해주세요.'
+  if (state.detailMode === 'create') return '입력정보 추가'
+  if (state.detailMode === 'edit') return '입력정보 수정'
+  if (selectedInput.value) return selectedInput.value.title
+  return '입력정보를 선택하세요.'
 })
 
 const detailEyebrow = computed(() => {
   if (state.detailMode === 'create') return '새로 추가'
   if (state.detailMode === 'edit') return '수정 중'
-  if (selectedPrompt.value) return '선택됨'
-  return state.activeTab === 'form' ? '입력 폼' : '입력정보'
+  return ''
 })
 
-const selectedSystem = computed(() => state.systemPrompts.find((p) => p.id === state.selectedSystemId) || null)
-
-const systemPreview = computed(() => {
-  if (!selectedSystem.value) return ''
-  return selectedSystem.value.content?.slice(0, 120) || ''
-})
-
-const openSystemModal = () => {
-  state.systemModalOpen = true
-  state.systemMode = 'view'
-  if (state.systemPrompts.length && !state.selectedSystemId) {
-    state.selectedSystemId = state.systemPrompts[0].id
-    state.systemDraft = { ...state.systemPrompts[0] }
-  } else if (!state.systemPrompts.length) {
-    state.selectedSystemId = null
-    state.systemDraft = { title: '', content: '' }
-    state.systemMode = 'create'
-  }
-}
-
-const closeSystemModal = () => {
-  state.systemModalOpen = false
-}
-
-const selectSystemPrompt = (id) => {
-  const found = state.systemPrompts.find((p) => p.id === id)
-  if (!found) return
-  state.selectedSystemId = id
-  state.systemMode = 'view'
-  state.systemDraft = { ...found }
-  emit('update:system', state.systemDraft)
-}
-
-const startSystemCreate = () => {
-  state.systemDraft = { title: '', content: '' }
-  state.systemMode = 'create'
-  state.selectedSystemId = null
-}
-
-const startSystemEdit = () => {
-  if (!selectedSystem.value) return
-  state.systemMode = 'edit'
-}
-
-const cancelSystemEditOrCreate = () => {
-  if (state.systemPrompts.length) {
-    const target = state.systemPrompts.find((p) => p.id === state.selectedSystemId) || state.systemPrompts[0]
-    state.selectedSystemId = target?.id || null
-    state.systemDraft = target ? { ...target } : { title: '', content: '' }
-    state.systemMode = target ? 'view' : 'create'
-  } else {
-    state.systemDraft = { title: '', content: '' }
-    state.systemMode = 'create'
-    state.systemModalOpen = false
-  }
-}
-
-const saveSystemPrompt = () => {
-  if (!state.systemDraft.title.trim() || !state.systemDraft.content.trim()) return
-  const id = state.selectedSystemId || Math.random().toString(36).slice(2, 11)
-  const payload = { id, title: state.systemDraft.title.trim(), content: state.systemDraft.content.trim() }
-  const idx = state.systemPrompts.findIndex((p) => p.id === id)
-  if (idx >= 0) state.systemPrompts.splice(idx, 1, payload)
-  else state.systemPrompts.unshift(payload)
-  state.selectedSystemId = id
-  state.systemMode = 'view'
-  persistSystemPrompts()
-  emit('update:system', payload)
-}
-
-const deleteSystemPrompt = () => {
-  if (!selectedSystem.value) return
-  if (!confirm('삭제하시겠습니까?')) return
-  state.systemPrompts = state.systemPrompts.filter((p) => p.id !== selectedSystem.value.id)
-  persistSystemPrompts()
-  state.selectedSystemId = state.systemPrompts[0]?.id || null
-  state.systemDraft = state.systemPrompts[0] || { title: '', content: '' }
-  emit('update:system', state.systemPrompts[0] || null)
-}
-
-const applySystemPrompt = () => {
-  if (!selectedSystem.value) return
-  if (state.systemMode !== 'view') return
-  emit('update:system', selectedSystem.value)
-  state.systemModalOpen = false
-}
-
-watch(
-  () => state.selectedSystemId,
-  () => {
-    if (selectedSystem.value) emit('update:system', selectedSystem.value)
-  }
-)
-
-const resetTemplateDraft = () => {
-  state.templateDraft = { name: '', fields: [{ label: '', placeholder: '' }] }
-}
-
-const openTemplateModal = () => {
-  state.templateModalOpen = true
-  state.templateMode = 'view'
-  if (state.templates.length) {
-    state.selectedTemplateId = state.templates[0].id
-    state.templateDraft = {
-      name: state.templates[0].name,
-      fields: state.templates[0].fields ? state.templates[0].fields.map((f) => ({ ...f })) : []
-    }
-  } else {
-    state.selectedTemplateId = null
-    resetTemplateDraft()
-    state.templateMode = 'create'
-  }
-}
-
-const closeTemplateModal = () => {
-  state.templateModalOpen = false
-}
-
-const selectTemplateForModal = (id) => {
-  const found = state.templates.find((t) => t.id === id)
-  if (!found) return
-  state.selectedTemplateId = id
-  state.templateMode = 'view'
-  state.templateDraft = {
-    name: found.name,
-    fields: found.fields ? found.fields.map((f) => ({ ...f })) : []
-  }
-}
-
-const startTemplateCreate = () => {
-  state.templateMode = 'create'
-  state.selectedTemplateId = null
-  resetTemplateDraft()
-}
-
-const startTemplateEdit = () => {
-  if (!state.selectedTemplateId) return
-  state.templateMode = 'edit'
-}
-
-const cancelTemplateEditOrCreate = () => {
-  if (state.templateMode === 'create') {
-    if (state.templates.length) {
-      const first = state.templates[0]
-      state.selectedTemplateId = first.id
-      state.templateDraft = {
-        name: first.name,
-        fields: first.fields ? first.fields.map((f) => ({ ...f })) : []
-      }
-      state.templateMode = 'view'
-    } else {
-      resetTemplateDraft()
-      state.templateMode = 'view'
-    }
+const emitReq = (input) => {
+  if (!input) {
+    emit('update:input', null)
     return
   }
-
-  if (state.templateMode === 'edit') {
-    const current = state.templates.find((t) => t.id === state.selectedTemplateId)
-    if (current) {
-      state.templateDraft = {
-        name: current.name,
-        fields: current.fields ? current.fields.map((f) => ({ ...f })) : []
-      }
-    }
-    state.templateMode = 'view'
+  const promptText = state.prompts.find((p) => p.id === input.promptId)?.text || ''
+  const req = {
+    req_id: input.id,
+    model: input.model,
+    version: input.version,
+    prompt: promptText,
+    hist: [],
+    user_input: input.text
   }
-}
-
-const deleteTemplate = () => {
-  if (!state.selectedTemplateId) return
-  if (!confirm('삭제하시겠습니까?')) return
-  state.templates = state.templates.filter((t) => t.id !== state.selectedTemplateId)
-  persistTemplates()
-  if (state.templates.length) {
-    state.selectedTemplateId = state.templates[0].id
-    state.templateDraft = {
-      name: state.templates[0].name,
-      fields: state.templates[0].fields ? state.templates[0].fields.map((f) => ({ ...f })) : []
-    }
-    state.templateMode = 'view'
-  } else {
-    state.selectedTemplateId = null
-    resetTemplateDraft()
-    state.templateMode = 'create'
-  }
-}
-
-const addTemplateField = () => {
-  state.templateDraft.fields = [...state.templateDraft.fields, { label: '', placeholder: '' }]
-}
-
-const removeTemplateField = (idx) => {
-  if (state.templateDraft.fields.length === 1) return
-  state.templateDraft.fields = state.templateDraft.fields.filter((_, i) => i !== idx)
-}
-
-const saveTemplate = () => {
-  const name = state.templateDraft.name.trim()
-  if (!name) return
-  const fields = state.templateDraft.fields.map((f) => ({
-    label: (f.label || '').trim(),
-    placeholder: (f.placeholder || '').trim()
-  }))
-  const cleanedFields = fields.length ? fields : []
-  const id = state.selectedTemplateId || Math.random().toString(36).slice(2, 11)
-  const payload = { id, name, fields: cleanedFields }
-  const idx = state.templates.findIndex((t) => t.id === id)
-  if (idx >= 0) {
-    state.templates.splice(idx, 1, payload)
-  } else {
-    state.templates.unshift(payload)
-  }
-  persistTemplates()
-  state.selectedTemplateId = id
-  state.templateMode = 'view'
-}
-
-const getFormFields = (prompt) => {
-  if (!prompt || prompt.type !== 'form') return []
-  try {
-    const parsed = JSON.parse(prompt.content || '{}')
-    if (Array.isArray(parsed.fields)) {
-      return parsed.fields.map((f) => ({
-        label: f.label || '',
-        placeholder: f.placeholder || '',
-        value: f.value || ''
-      }))
-    }
-  } catch (err) {
-    return []
-  }
-  return []
-}
-
-const currentTemplateName = (prompt) => {
-  if (!prompt || prompt.type !== 'form') return ''
-  try {
-    const parsed = JSON.parse(prompt.content || '{}')
-    return parsed.templateName || parsed.name || ''
-  } catch (err) {
-    return ''
-  }
-}
-
-const applyTemplate = () => {
-  if (!state.templateDraft.name) return
-  state.draft.template = JSON.stringify({
-    name: state.templateDraft.name,
-    fields: state.templateDraft.fields
-  })
-  syncFormValuesFromTemplate(state.draft.template)
-  state.templateModalOpen = false
-}
-
-const handleTemplateSelect = (value) => {
-  state.draft.template = value
-  syncFormValuesFromTemplate(value)
+  emit('update:input', req)
 }
 
 const startCreate = () => {
   state.detailMode = 'create'
-  state.selectedId = null
+  state.selectedInputId = null
   resetDraft()
-  emit('update:input', null)
+  emitReq(null)
 }
 
-const selectPrompt = (id) => {
-  state.selectedId = id
+const selectInput = (id) => {
+  state.selectedInputId = id
   state.detailMode = 'view'
-  const found = state.prompts.find((p) => p.id === id) || null
-  emit('update:input', found)
+  const found = state.userInputs.find((item) => item.id === id) || null
+  if (found) {
+    state.selectedPromptId = found.promptId || null
+  }
+  emitReq(found)
 }
 
 const startEdit = () => {
-  if (!selectedPrompt.value) return
+  if (!selectedInput.value) return
   state.detailMode = 'edit'
-  state.draft.title = selectedPrompt.value.title
-  state.draft.content = selectedPrompt.value.content
-
-  if (selectedPrompt.value.type === 'form') {
-    try {
-      const parsed = JSON.parse(selectedPrompt.value.content || '{}')
-      const tplName = parsed.templateName || parsed.name || ''
-      const tplFields = Array.isArray(parsed.fields)
-        ? parsed.fields.map((f) => ({ label: f.label || '', placeholder: f.placeholder || '' }))
-        : []
-      state.draft.template = JSON.stringify({ name: tplName, fields: tplFields })
-      syncFormValuesFromTemplate(JSON.stringify({ name: tplName, fields: parsed.fields || [] }))
-    } catch (err) {
-      state.draft.template = ''
-      state.formValues = []
-    }
-  } else {
-    state.draft.template = ''
-    state.formValues = []
+  state.draft = {
+    title: selectedInput.value.title,
+    text: selectedInput.value.text,
+    model: selectedInput.value.model || DEFAULT_PROVIDER,
+    version: selectedInput.value.version || DEFAULT_VERSION,
+    promptId: selectedInput.value.promptId || null
   }
+  state.selectedPromptId = selectedInput.value.promptId || null
 }
 
-const deletePrompt = () => {
-  if (!selectedPrompt.value) return
-  if (!confirm('삭제하시겠습니까?')) return
-  state.prompts = state.prompts.filter((p) => p.id !== selectedPrompt.value.id)
-  persistPrompts()
-  state.selectedId = null
-  state.detailMode = 'idle'
-  emit('update:input', null)
-}
-
-const savePrompt = () => {
+const saveInput = () => {
   const title = state.draft.title.trim()
-  const isForm = state.activeTab === 'form'
+  const text = state.draft.text.trim()
+  if (!title || !text) return
 
-  if (!title) return
-
-  let templateObj = null
-  if (isForm) {
-    const template = state.draft.template.trim()
-    if (!template) return
-    try {
-      templateObj = JSON.parse(template)
-    } catch (err) {
-      return
-    }
-  } else if (!state.draft.content.trim()) {
-    return
-  }
-
-  const id = state.detailMode === 'edit' && selectedPrompt.value ? selectedPrompt.value.id : Math.random().toString(36).slice(2, 11)
-  const formContent = isForm && templateObj
-    ? JSON.stringify({
-        templateName: templateObj.name,
-        fields: Array.isArray(templateObj.fields)
-          ? templateObj.fields.map((f, idx) => ({
-              label: f.label || '',
-              placeholder: f.placeholder || '',
-              value: state.formValues?.[idx]?.value || ''
-            }))
-          : []
-      })
-    : null
+  const id =
+    state.detailMode === 'edit' && selectedInput.value
+      ? selectedInput.value.id
+      : Math.random().toString(36).slice(2, 11)
 
   const payload = {
     id,
     title,
-    content: isForm ? formContent : state.draft.content.trim(),
-    type: isForm ? 'form' : 'text'
+    text,
+    model: state.draft.model,
+    version: state.draft.version,
+    promptId: state.draft.promptId || null
   }
 
-  const existingIndex = state.prompts.findIndex((p) => p.id === id)
+  const existingIndex = state.userInputs.findIndex((p) => p.id === id)
   if (existingIndex >= 0) {
-    state.prompts.splice(existingIndex, 1, payload)
+    state.userInputs.splice(existingIndex, 1, payload)
   } else {
-    state.prompts.unshift(payload)
+    state.userInputs.unshift(payload)
   }
-
-  persistPrompts()
-  state.selectedId = id
+  persistUserInputs()
+  state.selectedInputId = id
   state.detailMode = 'view'
-  emit('update:input', payload)
+  emitReq(payload)
+}
+
+const deleteInput = () => {
+  if (!selectedInput.value) return
+  if (!confirm('삭제하시겠습니까?')) return
+  state.userInputs = state.userInputs.filter((p) => p.id !== selectedInput.value.id)
+  persistUserInputs()
+  state.selectedInputId = null
+  state.detailMode = 'idle'
+  emitReq(null)
+}
+
+const openPromptModal = () => {
+  state.promptModalOpen = true
+  if (state.prompts.length) {
+    const first = state.prompts[0]
+    state.selectedPromptId = first.id
+    state.promptDraft = { title: first.title, text: first.text }
+    state.promptMode = 'view'
+  } else {
+    state.selectedPromptId = null
+    state.promptDraft = { title: '', text: '' }
+    state.promptMode = 'create'
+  }
+}
+
+const closePromptModal = () => {
+  state.promptModalOpen = false
+}
+
+const selectPromptForModal = (id) => {
+  const found = state.prompts.find((p) => p.id === id)
+  if (!found) return
+  state.selectedPromptId = id
+  state.promptMode = 'view'
+  state.promptDraft = { title: found.title, text: found.text }
+}
+
+const startPromptCreate = () => {
+  state.promptMode = 'create'
+  state.selectedPromptId = null
+  state.promptDraft = { title: '', text: '' }
+}
+
+const startPromptEdit = () => {
+  if (!state.selectedPromptId) return
+  state.promptMode = 'edit'
+}
+
+const cancelPromptEditOrCreate = () => {
+  if (state.promptMode === 'create') {
+    if (state.prompts.length) {
+      const first = state.prompts[0]
+      state.selectedPromptId = first.id
+      state.promptDraft = { title: first.title, text: first.text }
+      state.promptMode = 'view'
+    } else {
+      state.promptDraft = { title: '', text: '' }
+      state.promptMode = 'view'
+    }
+    return
+  }
+  if (state.promptMode === 'edit') {
+    const current = state.prompts.find((p) => p.id === state.selectedPromptId)
+    if (current) {
+      state.promptDraft = { title: current.title, text: current.text }
+    }
+    state.promptMode = 'view'
+  }
+}
+
+const savePrompt = () => {
+  const title = state.promptDraft.title.trim()
+  const text = state.promptDraft.text.trim()
+  if (!title || !text) return
+  const id = state.selectedPromptId || Math.random().toString(36).slice(2, 11)
+  const payload = { id, title, text }
+  const idx = state.prompts.findIndex((p) => p.id === id)
+  if (idx >= 0) state.prompts.splice(idx, 1, payload)
+  else state.prompts.unshift(payload)
+  persistPrompts()
+  state.selectedPromptId = id
+  state.promptMode = 'view'
+}
+
+const deletePrompt = () => {
+  if (!state.selectedPromptId) return
+  if (!confirm('삭제하시겠습니까?')) return
+  state.prompts = state.prompts.filter((p) => p.id !== state.selectedPromptId)
+  persistPrompts()
+  if (state.prompts.length) {
+    state.selectedPromptId = state.prompts[0].id
+    state.promptDraft = { title: state.prompts[0].title, text: state.prompts[0].text }
+    state.promptMode = 'view'
+  } else {
+    state.selectedPromptId = null
+    state.promptDraft = { title: '', text: '' }
+    state.promptMode = 'create'
+  }
+}
+
+const applyPrompt = () => {
+  if (!state.selectedPromptId) return
+  state.draft.promptId = state.selectedPromptId
+  state.promptModalOpen = false
+}
+
+const updateSelectedModel = (provider) => {
+  if (!selectedInput.value) return
+  const versions = modelFamilies.find((f) => f.id === provider)?.subModels || []
+  const nextVersion = versions.includes(selectedInput.value.version) ? selectedInput.value.version : versions[0] || selectedInput.value.version
+  const updated = { ...selectedInput.value, model: provider, version: nextVersion }
+  const idx = state.userInputs.findIndex((u) => u.id === selectedInput.value.id)
+  if (idx >= 0) state.userInputs.splice(idx, 1, updated)
+  persistUserInputs()
+  emitReq(updated)
+}
+
+const updateSelectedVersion = (version) => {
+  if (!selectedInput.value) return
+  const updated = { ...selectedInput.value, version }
+  const idx = state.userInputs.findIndex((u) => u.id === selectedInput.value.id)
+  if (idx >= 0) state.userInputs.splice(idx, 1, updated)
+  persistUserInputs()
+  emitReq(updated)
+}
+
+const updateSelectedPrompt = (promptId) => {
+  if (!selectedInput.value) return
+  const normalized = promptId || null
+  const updated = { ...selectedInput.value, promptId: normalized }
+  const idx = state.userInputs.findIndex((u) => u.id === selectedInput.value.id)
+  if (idx >= 0) state.userInputs.splice(idx, 1, updated)
+  persistUserInputs()
+  emitReq(updated)
 }
 
 watch(
-  () => state.activeTab,
-  () => {
-    state.selectedId = null
-    state.detailMode = 'idle'
-    resetDraft()
-    emit('update:input', null)
+  () => state.draft.model,
+  (provider) => {
+    const versions = modelFamilies.find((f) => f.id === provider)?.subModels || []
+    if (!versions.includes(state.draft.version)) {
+      state.draft.version = versions[0] || DEFAULT_VERSION
+    }
+  }
+)
+
+watch(
+  () => state.selectedPromptId,
+  (id) => {
+    state.draft.promptId = id
   }
 )
 
 onMounted(() => {
+  loadUserInputs()
   loadPrompts()
-  loadTemplates()
-  loadSystemPrompts()
 })
 </script>
 
 <template>
-    <div class="prompt-manager">
-    <div class="system-toolbar">
-      <div>
-        <p class="selected-badge" v-if="selectedSystem">선택된 프롬프트</p>
-        <h3 class="meta-title">{{ selectedSystem?.title || '프롬프트 관리에서 프롬프트를 선택하세요.' }}</h3>
-      </div>
-      <div class="system-actions">
-        <button class="ghost-btn" @click="openSystemModal">프롬프트 관리</button>
-      </div>
-    </div>
-      <div class="list-pane">
-        <div class="list-pane-header">
-          <h3>입력 정보 목록</h3>
+  <div class="prompt-manager two-col">
+    <div class="list-pane">
+      <div class="list-pane-header">
+        <div>
+          <p class="eyebrow">입력정보</p>
+          <h3>저장된 입력</h3>
         </div>
-        <div class="tab-row">
-          <button
-            class="tab-btn"
-            :class="{ active: state.activeTab === 'text' }"
-            @click="state.activeTab = 'text'"
-        >
-          텍스트
-        </button>
-        <button
-          class="tab-btn"
-          :class="{ active: state.activeTab === 'form' }"
-          @click="state.activeTab = 'form'"
-        >
-          입력 폼
-        </button>
-        <button class="add-btn" @click="startCreate">+</button>
+        <div class="list-actions">
+          <button class="ghost-btn xs" @click="startCreate">+ 새 입력</button>
+        </div>
       </div>
 
       <div class="list">
         <div
-          v-for="prompt in tabPrompts"
-          :key="prompt.id"
+          v-for="input in state.userInputs"
+          :key="input.id"
           class="list-item"
-          :class="{ active: state.selectedId === prompt.id }"
-          @click="selectPrompt(prompt.id)"
+          :class="{ active: state.selectedInputId === input.id }"
+          @click="selectInput(input.id)"
         >
-          <p class="title">{{ prompt.title }}</p>
+          <div class="list-top">
+            <p class="title">{{ input.title }}</p>
+            <span class="pill mini">{{ input.model }}</span>
+          </div>
+          <p class="meta">{{ input.version }}</p>
+          <p class="meta light">프롬프트: {{ state.prompts.find((p) => p.id === input.promptId)?.title || '미선택' }}</p>
         </div>
-        <div v-if="tabPrompts.length === 0" class="empty">리스트가 없습니다.</div>
+        <div v-if="state.userInputs.length === 0" class="empty">리스트가 없습니다.</div>
       </div>
     </div>
 
     <div class="detail-pane">
       <div class="detail-header">
         <div>
-          <p class="eyebrow">{{ detailEyebrow }}</p>
+          <p class="eyebrow" v-if="detailEyebrow">{{ detailEyebrow }}</p>
           <h3>{{ detailTitle }}</h3>
         </div>
         <div class="header-actions">
-          <span class="pill" :class="{ form: state.activeTab === 'form' }">
-            {{ state.activeTab === 'form' ? '입력 폼' : '텍스트' }}
-          </span>
-          <template v-if="state.detailMode === 'view' && selectedPrompt">
+          <template v-if="state.detailMode === 'view' && selectedInput">
             <button class="ghost-btn xs" @click="startEdit">수정</button>
-            <button class="ghost-btn xs danger" @click="deletePrompt">삭제</button>
+            <button class="ghost-btn xs danger" @click="deleteInput">삭제</button>
           </template>
         </div>
       </div>
 
       <div class="detail-body">
         <template v-if="state.detailMode === 'create' || state.detailMode === 'edit'">
-          <div class="field">
-            <label>제목</label>
-            <input v-model="state.draft.title" placeholder="제목을 입력하세요." />
-          </div>
-
-          <div v-if="state.activeTab === 'text'" class="field">
-            <label>입력 내용</label>
-            <textarea v-model="state.draft.content" rows="8" placeholder="입력정보 내용을 작성하세요."></textarea>
-          </div>
-
-          <div v-else class="field">
-            <label>템플릿을 선택하세요.</label>
-            <div class="template-row">
-              <select :value="state.draft.template" @change="handleTemplateSelect($event.target.value)">
-                <option disabled value="">템플릿 선택</option>
-                <option
-                  v-for="tpl in state.templates"
-                  :key="tpl.id"
-                  :value="JSON.stringify({ name: tpl.name, fields: tpl.fields })"
-                >
-                  {{ tpl.name }}
+          <div class="grid-two">
+            <div class="field">
+              <label>모델</label>
+              <select v-model="state.draft.model">
+                <option v-for="family in modelFamilies" :key="family.id" :value="family.id">
+                  {{ family.label }}
                 </option>
               </select>
-              <button class="ghost-btn" @click.prevent="openTemplateModal">...</button>
             </div>
-            <div v-if="currentTemplate?.fields?.length" class="fill-fields">
-              <div
-                v-for="(field, idx) in currentTemplate.fields"
-                :key="idx"
-                class="field-fill-row"
-              >
-                <label>{{ field.label || `필드 ${idx + 1}` }}</label>
-                <input
-                  v-model="state.formValues[idx].value"
-                  :placeholder="field.placeholder || '값을 입력하세요.'"
-                />
+            <div class="field">
+              <label>버전</label>
+              <select v-model="state.draft.version">
+                <option v-for="sub in currentModelVersions" :key="sub" :value="sub">
+                  {{ sub }}
+                </option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>프롬프트</label>
+            <div class="select-row">
+              <select v-model="state.draft.promptId">
+                <option value="">프롬프트 선택 안 함</option>
+                <option v-for="p in state.prompts" :key="p.id" :value="p.id">
+                  {{ p.title }}
+                </option>
+              </select>
+              <button class="ghost-btn xs" @click="openPromptModal">관리</button>
+            </div>
+            <p class="helper" v-if="state.draft.promptId">
+              미리보기: {{ state.prompts.find((p) => p.id === state.draft.promptId)?.text.slice(0, 120) }}
+            </p>
+          </div>
+
+          <div class="grid-two">
+            <div class="field">
+              <label>입력정보 이름</label>
+              <input v-model="state.draft.title" placeholder="입력정보 이름을 입력하세요." />
+            </div>
+            <div class="field">
+              <label>입력 형태</label>
+              <div class="segmented disabled">
+                <button class="active" disabled>텍스트</button>
+                <button disabled>폼 (준비 중)</button>
               </div>
             </div>
-            <p class="helper">템플릿을 선택 후 필드 값을 채워 저장하세요.</p>
+          </div>
+
+          <div class="field">
+            <label>입력 값</label>
+            <textarea v-model="state.draft.text" rows="8" placeholder="보낼 텍스트를 작성하세요."></textarea>
           </div>
 
           <div class="actions">
             <button class="ghost-btn" @click="state.detailMode = 'idle'; resetDraft()">취소</button>
-            <button class="primary-btn" @click="savePrompt">저장</button>
+            <button class="primary-btn" @click="saveInput">저장</button>
           </div>
         </template>
 
-        <template v-else-if="selectedPrompt">
-          <div class="field">
-            <label>제목</label>
-            <div class="detail-card">{{ selectedPrompt.title }}</div>
-          </div>
-          <div class="field" v-if="selectedPrompt.type === 'text'">
-            <label>입력정보 내용</label>
-            <div class="detail-card"><pre>{{ selectedPrompt.content }}</pre></div>
-          </div>
-          <div class="field" v-else>
-            <label>입력 폼</label>
-            <div class="detail-card">
-              <p class="template-name" v-if="currentTemplateName(selectedPrompt)">템플릿: {{ currentTemplateName(selectedPrompt) }}</p>
-              <div v-if="getFormFields(selectedPrompt).length" class="fill-fields read-only-form">
-                <div
-                  v-for="(field, idx) in getFormFields(selectedPrompt)"
-                  :key="idx"
-                  class="field-fill-row"
-                >
-                  <label>{{ field.label || `필드 ${idx + 1}` }}</label>
-                  <div class="readonly-box">{{ field.value || '(미입력)' }}</div>
-                </div>
+        <template v-else-if="selectedInput">
+          <div class="info-grid">
+            <div class="field">
+              <label>모델 / 버전</label>
+              <div class="inline-pair">
+                <select :value="selectedInput.model" @change="updateSelectedModel($event.target.value)">
+                  <option v-for="family in modelFamilies" :key="family.id" :value="family.id">
+                    {{ family.label }}
+                  </option>
+                </select>
+                <select :value="selectedInput.version" @change="updateSelectedVersion($event.target.value)">
+                  <option v-for="sub in viewModelVersions" :key="sub" :value="sub">
+                    {{ sub }}
+                  </option>
+                </select>
               </div>
-              <div v-else>폼 데이터 없음</div>
             </div>
+            <div class="field">
+              <label>프롬프트</label>
+              <div class="select-row">
+                <select :value="selectedInput.promptId || ''" @change="updateSelectedPrompt($event.target.value)">
+                  <option value="">프롬프트 선택 안 함</option>
+                  <option v-for="p in state.prompts" :key="p.id" :value="p.id">
+                    {{ p.title }}
+                  </option>
+                </select>
+                <button class="ghost-btn xs" @click="openPromptModal">관리</button>
+              </div>
+            </div>
+            <div class="field">
+              <label>입력정보 이름</label>
+              <div class="detail-card">{{ selectedInput.title }}</div>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>입력 값</label>
+            <div class="detail-card"><pre>{{ selectedInput.text }}</pre></div>
           </div>
         </template>
 
         <div v-else class="empty-detail">
-          좌측에서 입력정보나 입력 폼을 선택하거나 추가하세요.
+          좌측에서 입력정보를 선택하거나 추가하세요.
         </div>
       </div>
     </div>
   </div>
 
-
   <teleport to="body">
-    <div class="system-modal" v-if="state.systemModalOpen">
-      <div class="template-modal-content">
-          <div class="modal-header">
-            <div>
-              <p class="eyebrow template-title">프롬프트</p>
-              <h4>{{ state.systemMode === 'create' ? '새 프롬프트 추가' : '프롬프트 관리' }}</h4>
-            </div>
-            <div class="header-actions">
-              <button class="ghost-btn" @click="startSystemCreate">+ 새 프롬프트</button>
-              <button class="ghost-btn" @click="closeSystemModal">닫기</button>
-            </div>
-          </div>
-          <div class="template-layout">
-            <div class="template-list">
-            <div
-              v-for="sp in state.systemPrompts"
-              :key="sp.id"
-              class="template-item"
-              :class="{ active: state.selectedSystemId === sp.id }"
-              @click="selectSystemPrompt(sp.id)"
-            >
-              <p class="title">{{ sp.title }}</p>
-              <p class="meta">본문 {{ sp.content.length }}자</p>
-            </div>
-            <div v-if="state.systemPrompts.length === 0" class="empty">프롬프트가 없습니다.</div>
-            </div>
-            <div class="template-detail">
-              <div class="field">
-                <label>제목</label>
-                <input
-                  v-model="state.systemDraft.title"
-                  :disabled="state.systemMode === 'view'"
-                  placeholder="시스템 프롬프트 제목"
-                />
-              </div>
-              <div class="field">
-                <label>내용</label>
-                <textarea
-                  v-model="state.systemDraft.content"
-                  rows="8"
-                  :disabled="state.systemMode === 'view'"
-                  placeholder="시스템 프롬프트 내용을 입력하세요."
-              ></textarea>
-              </div>
-              <div class="actions">
-                <div class="action-left">
-                  <template v-if="state.systemMode === 'create'">
-                    <button class="primary-btn" @click="saveSystemPrompt">저장</button>
-                    <button class="ghost-btn" @click="cancelSystemEditOrCreate">취소</button>
-                  </template>
-                  <template v-else>
-                    <button class="ghost-btn" v-if="state.systemMode === 'view' && selectedSystem" @click="startSystemEdit">수정</button>
-                    <button class="primary-btn" v-if="state.systemMode === 'edit'" @click="saveSystemPrompt">저장</button>
-                    <button class="ghost-btn danger" v-if="selectedSystem" @click="deleteSystemPrompt">삭제</button>
-                  </template>
-                </div>
-                <div class="action-right">
-                  <template v-if="state.systemMode !== 'create'">
-                    <button class="ghost-btn" @click="applySystemPrompt" :disabled="!selectedSystem || state.systemMode !== 'view'">적용</button>
-                  </template>
-                </div>
-              </div>
-            </div>
-          </div>
-      </div>
-    </div>
-  </teleport>
-  <teleport to="body">
-    <div class="template-modal" v-if="state.templateModalOpen">
-      <div class="template-modal-content">
+    <div class="prompt-modal" v-if="state.promptModalOpen">
+      <div class="prompt-modal-content">
         <div class="modal-header">
           <div>
-            <p class="eyebrow template-title">입력 폼 템플릿 관리</p>
-            <h4>{{ state.templateMode === 'create' ? '새 템플릿 추가' : '템플릿 선택' }}</h4>
+            <p class="eyebrow template-title">프롬프트 관리</p>
+            <h4>{{ state.promptMode === 'create' ? '새 프롬프트 추가' : '프롬프트 선택' }}</h4>
           </div>
           <div class="header-actions">
-            <button class="ghost-btn" @click="startTemplateCreate">+ 템플릿 추가</button>
-            <button class="ghost-btn" @click="closeTemplateModal">닫기</button>
+            <button class="ghost-btn" @click="startPromptCreate">+ 프롬프트 추가</button>
+            <button class="ghost-btn" @click="closePromptModal">닫기</button>
           </div>
         </div>
         <div class="template-layout">
           <div class="template-list">
             <div
-              v-for="tpl in state.templates"
-              :key="tpl.id"
+              v-for="p in state.prompts"
+              :key="p.id"
               class="template-item"
-              :class="{ active: state.selectedTemplateId === tpl.id }"
-              @click="selectTemplateForModal(tpl.id)"
+              :class="{ active: state.selectedPromptId === p.id }"
+              @click="selectPromptForModal(p.id)"
             >
-              <p class="title">{{ tpl.name }}</p>
-              <p class="meta">필드 {{ tpl.fields?.length || 0 }}</p>
+              <p class="title">{{ p.title }}</p>
+              <p class="meta">본문 {{ p.text.length }}자</p>
             </div>
-            <div v-if="state.templates.length === 0" class="empty">템플릿이 없습니다.</div>
+            <div v-if="state.prompts.length === 0" class="empty">프롬프트가 없습니다.</div>
           </div>
           <div class="template-detail">
             <div class="field">
-              <label>템플릿 이름</label>
+              <label>제목</label>
               <input
-                v-model="state.templateDraft.name"
-                placeholder="템플릿 이름"
-                :disabled="state.templateMode === 'view'"
+                v-model="state.promptDraft.title"
+                :disabled="state.promptMode === 'view'"
+                placeholder="프롬프트 제목"
               />
             </div>
             <div class="field">
-              <div class="field-row">
-                <label>필드</label>
-                <button class="ghost-btn xs" @click="addTemplateField" :disabled="state.templateMode === 'view'">+ 필드 추가</button>
-              </div>
-              <div class="field-list">
-                <div
-                  v-for="(field, idx) in state.templateDraft.fields"
-                  :key="idx"
-                  class="field-card"
-                >
-                  <input v-model="field.label" placeholder="라벨" :disabled="state.templateMode === 'view'" />
-                  <input v-model="field.placeholder" placeholder="예시/placeholder" :disabled="state.templateMode === 'view'" />
-                  <button class="ghost-btn xs" @click="removeTemplateField(idx)" :disabled="state.templateMode === 'view'">삭제</button>
-                </div>
-              </div>
+              <label>내용</label>
+              <textarea
+                v-model="state.promptDraft.text"
+                rows="8"
+                :disabled="state.promptMode === 'view'"
+                placeholder="프롬프트 내용을 입력하세요."
+              ></textarea>
             </div>
             <div class="actions">
               <button
                 class="ghost-btn"
-                v-if="state.templateMode === 'view' && state.selectedTemplateId"
-                @click="startTemplateEdit"
+                v-if="state.promptMode === 'view' && state.selectedPromptId"
+                @click="startPromptEdit"
               >
                 수정
               </button>
-              <button class="ghost-btn" v-else @click="cancelTemplateEditOrCreate">취소</button>
+              <button class="ghost-btn" v-else @click="cancelPromptEditOrCreate">취소</button>
               <button
                 class="ghost-btn danger"
-                v-if="state.templateMode !== 'create' && state.selectedTemplateId"
-                @click="deleteTemplate"
+                v-if="state.promptMode !== 'create' && state.selectedPromptId"
+                @click="deletePrompt"
               >
                 삭제
               </button>
               <button
-                v-if="state.templateMode !== 'view'"
-                :class="['primary-btn', { 'save-btn': state.templateMode !== 'view' }]"
-                @click="saveTemplate"
+                v-if="state.promptMode !== 'view'"
+                :class="['primary-btn', { 'save-btn': state.promptMode !== 'view' }]"
+                @click="savePrompt"
               >
                 저장
               </button>
               <button
                 class="ghost-btn apply-btn"
-                @click="applyTemplate"
-                :disabled="!state.templateDraft.name || state.templateMode !== 'view'"
-                v-if="state.templateMode === 'view'"
+                @click="applyPrompt"
+                :disabled="!state.selectedPromptId || state.promptMode !== 'view'"
+                v-if="state.promptMode === 'view'"
               >
                 적용
               </button>
@@ -818,35 +596,14 @@ onMounted(() => {
 <style scoped>
 .prompt-manager {
   display: grid;
-  grid-template-columns: 0.9fr 1.6fr;
-  grid-template-rows: auto 1fr;
-  gap: 10px;
+  grid-template-columns: 0.95fr 1.55fr;
+  grid-template-rows: 1fr;
+  gap: 12px;
   color: #e6ecff;
   height: 100%;
   min-height: 0;
   overflow: hidden;
   box-sizing: border-box;
-}
-
-.system-toolbar {
-  min-height: 44px;
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.system-toolbar .meta-title {
-  margin: 2px 0 0;
-}
-
-.system-toolbar .system-actions {
-  display: flex;
-  gap: 8px;
 }
 
 .list-pane {
@@ -862,6 +619,10 @@ onMounted(() => {
 .list-pane-header {
   padding: 4px 2px 8px;
   min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .list-pane-header h3 {
@@ -872,6 +633,12 @@ onMounted(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.list-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 .detail-pane {
@@ -885,21 +652,6 @@ onMounted(() => {
   min-height: 0;
   overflow: hidden;
 }
-
-
-.selected-badge {
-  margin: 6px 0 0;
-  font-size: 11px;
-  color: #cfe7ff;
-  letter-spacing: 0.05em;
-}
-.system-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-
 
 .read-only-form .readonly-box {
   padding: 10px;
@@ -925,48 +677,6 @@ onMounted(() => {
 .primary-btn.xs {
   padding: 8px 12px;
   font-size: 12px;
-}
-.tab-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 10px;
-  flex-wrap: nowrap;
-  min-width: 0;
-}
-
-.tab-btn {
-  flex: 1 1 0;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.05);
-  color: #e6ecff;
-  cursor: pointer;
-  font-size: 13px;
-  transition: border-color 0.2s ease, background-color 0.2s ease;
-  min-width: 80px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.tab-btn.active {
-  border-color: rgba(99, 179, 255, 0.8);
-  background: rgba(99, 179, 255, 0.16);
-}
-
-.add-btn {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.08);
-  color: #e6ecff;
-  cursor: pointer;
-  font-weight: 700;
-  font-size: 16px;
-  flex-shrink: 0;
 }
 
 .list {
@@ -1003,6 +713,23 @@ onMounted(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   overflow: hidden;
+}
+
+.list-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.meta {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: rgba(230, 236, 255, 0.8);
+}
+
+.meta.light {
+  color: rgba(230, 236, 255, 0.65);
 }
 
 .empty {
@@ -1055,10 +782,9 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-.pill.form {
-  border-color: rgba(99, 179, 255, 0.5);
-  color: #cfe7ff;
-  background: rgba(99, 179, 255, 0.15);
+.pill.mini {
+  padding: 4px 8px;
+  font-size: 11px;
 }
 
 .ghost-btn {
@@ -1096,6 +822,65 @@ onMounted(() => {
   margin-top: 12px;
   min-height: 0;
   padding-bottom: 14px;
+}
+
+.grid-two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.inline-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.inline-pair select {
+  width: 100%;
+}
+
+.segmented {
+  display: inline-flex;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.segmented button {
+  border: none;
+  background: transparent;
+  color: #e6ecff;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.segmented button.active {
+  background: rgba(99, 179, 255, 0.16);
+  color: #cfe7ff;
+}
+
+.segmented.disabled button {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.select-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.select-row select {
+  flex: 1;
 }
 
 .field label {
@@ -1179,11 +964,6 @@ onMounted(() => {
   box-shadow: 0 8px 24px rgba(99, 179, 255, 0.3);
 }
 
-.template-row {
-  display: flex;
-  gap: 8px;
-}
-
 .helper {
   margin: 6px 0 0;
   color: rgba(230, 236, 255, 0.7);
@@ -1198,7 +978,7 @@ onMounted(() => {
   text-align: center;
 }
 
-.template-modal {
+.prompt-modal {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.7);
@@ -1210,13 +990,13 @@ onMounted(() => {
   padding: 20px;
 }
 
-.template-modal-content {
+.prompt-modal-content {
   background: linear-gradient(135deg, rgba(12, 18, 32, 0.95), rgba(15, 23, 42, 0.95));
   border: 1px solid rgba(99, 179, 255, 0.2);
   border-radius: 16px;
   padding: 20px;
   width: 100%;
-  max-width: 780px;
+  max-width: 760px;
   max-height: 80vh;
   display: flex;
   flex-direction: column;
@@ -1280,44 +1060,6 @@ onMounted(() => {
   min-width: 0;
 }
 
-.field-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.field-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-height: 360px;
-  overflow: auto;
-  margin-top: 8px;
-}
-
-.field-card {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
-  align-items: flex-start;
-}
-
-.field-card input {
-  flex: 1 1 150px;
-  min-width: 0;
-}
-
-.field-card button {
-  flex: 0 0 auto;
-  min-width: 72px;
-  align-self: center;
-}
-
 .template-detail .actions {
   display: flex;
   align-items: center;
@@ -1362,66 +1104,10 @@ onMounted(() => {
   color: #ffffff;
 }
 
-.template-detail {
-  min-height: 320px;
-}
-
 @media (max-width: 900px) {
   .template-layout {
     grid-template-columns: 1fr;
   }
-}
-
-
-.fill-fields {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 10px;
-}
-
-.field-fill-row {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.field-fill-row label {
-  font-size: 12px;
-  color: rgba(230, 236, 255, 0.8);
-  margin: 0;
-}
-
-.field-fill-row input {
-  width: 100%;
-  border-radius: 10px;
-  border: 1px solid rgba(99, 179, 255, 0.2);
-  background: rgba(255, 255, 255, 0.05);
-  color: #e6ecff;
-  padding: 10px;
-  font-size: 13px;
-}
-
-.preview-field {
-  margin-bottom: 6px;
-}
-
-.field-value {
-  margin: 2px 0 0;
-  font-size: 12px;
-  color: rgba(230, 236, 255, 0.85);
-}
-
-.system-modal {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(8px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 125;
-  padding: 20px;
 }
 
 .system-modal .template-modal-content {
@@ -1433,6 +1119,9 @@ onMounted(() => {
 }
 @media (max-width: 1100px) {
   .prompt-manager {
+    grid-template-columns: 1fr;
+  }
+  .grid-two {
     grid-template-columns: 1fr;
   }
 }

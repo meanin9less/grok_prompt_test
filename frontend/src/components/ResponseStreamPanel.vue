@@ -5,7 +5,7 @@ import { useChatMarkdown } from '../composables/useChatMarkdown'
 const props = defineProps({
   apiPath: {
     type: [String, Object],
-    default: '/api/chat/prompt-chat'
+    default: '/api/ai_hub/get_prompt_res_text'
   },
   model: {
     type: String,
@@ -15,13 +15,9 @@ const props = defineProps({
     type: [String, Object],
     default: null
   },
-  systemPrompt: {
-    type: Object,
-    default: null
-  },
   inputPrompt: {
     type: Object,
-    default: null
+    default: null // now treated as req payload
   }
 })
 
@@ -96,15 +92,7 @@ const parseFormPayload = (content) => {
   }
 }
 
-const buildUserPreview = (prompt) => {
-  if (!prompt) return ''
-  if (prompt.type === 'form') {
-    const fields = parseFormPayload(prompt.content)
-    if (!fields.length) return '폼 입력값 없음'
-    return fields.map((f) => `${f.label || '항목'}: ${f.value || f.placeholder || ''}`).join(' · ')
-  }
-  return prompt.content || ''
-}
+const buildUserPreview = (req) => (req?.user_input ? req.user_input : '')
 
 const selectRun = (id) => {
   selectedRunId.value = id
@@ -121,21 +109,20 @@ const scrollToBottom = async () => {
   }
 }
 
-const runExecution = (systemPrompt, inputPrompt, generationOptions) => {
-  const inputText = inputPrompt?.content || ''
-  if (!inputText) return
+const runExecution = (req, generationOptions) => {
+  if (!req || !req.user_input) return
 
   // 새 run 생성
   const runId = Date.now().toString()
-  const userPreview = buildUserPreview(inputPrompt)
+  const userPreview = buildUserPreview(req)
   const run = {
     id: runId,
-    title: systemPrompt?.title || inputPrompt?.title || '이름 없는 프롬프트',
-    model: props.model || 'unknown',
-    modelVersion: props.modelVersion || '모델 미선택',
-    promptContent: systemPrompt?.content || '',
-    inputRaw: inputPrompt?.content || '',
-    inputType: inputPrompt?.type || 'text',
+    title: req.title || '이름 없는 요청',
+    model: req.model || props.model || 'unknown',
+    modelVersion: req.version || props.modelVersion || '모델 미선택',
+    promptContent: req.prompt || '',
+    inputRaw: req.user_input || '',
+    inputType: 'text',
     userPreview,
     responseText: '',
     createdAt: new Date().toISOString(),
@@ -151,10 +138,10 @@ const runExecution = (systemPrompt, inputPrompt, generationOptions) => {
   persistRuns()
 
   // 비동기로 메시지 전송
-  sendMessageStream(inputText, run, systemPrompt)
+  sendMessageStream(req, run)
 }
 
-const sendMessageStream = async (inputText, run, systemPrompt) => {
+const sendMessageStream = async (req, run) => {
   try {
     const { sendMessage } = await import('../services/grokApi')
     const apiPath = typeof props.apiPath === 'object' && 'value' in props.apiPath ? props.apiPath.value : props.apiPath
@@ -170,7 +157,7 @@ const sendMessageStream = async (inputText, run, systemPrompt) => {
       }
     ]
 
-    await sendMessage(inputText, (chunk) => {
+    await sendMessage(req, (chunk) => {
       const strChunk = String(chunk ?? '')
       currentMessage.value = `${currentMessage.value}${strChunk}`
       // 메시지 배열 업데이트 - 실시간으로 마크다운 렌더링
@@ -191,7 +178,7 @@ const sendMessageStream = async (inputText, run, systemPrompt) => {
       }
 
       scrollToBottom()
-    }, apiPath, [], props.model || null, systemPrompt?.content || null, props.modelVersion || null, '')
+    }, apiPath)
 
   } catch (error) {
     console.error('Error:', error)

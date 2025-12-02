@@ -4,7 +4,6 @@ import PromptManagerPanel from './components/PromptManagerPanel.vue'
 import ResponseStreamPanel from './components/ResponseStreamPanel.vue'
 import MetaDrawer from './components/MetaDrawer.vue'
 
-const g_selectedSystemPrompt = ref(null)
 const g_selectedInputPrompt = ref(null)
 const g_selectedProvider = ref('grok')
 const g_selectedModel = ref('grok-4-1-fast-reasoning')
@@ -40,7 +39,7 @@ provide('g_isStreaming', g_isStreaming)
 
 const responsePanelRef = ref(null)
 
-const providerApiPath = computed(() => '/api/chat/prompt-chat')
+const providerApiPath = computed(() => '/api/ai_hub/get_prompt_res_text')
 
 const subModelOptions = computed(() => {
   const family = modelFamilies.find((item) => item.id === g_selectedProvider.value)
@@ -62,26 +61,15 @@ const readyForRun = computed(() => Boolean(g_selectedInputPrompt.value))
 
 const handleExecute = () => {
   if (!readyForRun.value || !responsePanelRef.value) return
-
-  const systemPrompt =
-    g_selectedSystemPrompt.value ||
-    (g_generationOptions.value.systemOverride && g_generationOptions.value.systemOverride.trim()
-      ? { content: g_generationOptions.value.systemOverride }
-      : null)
-
-  responsePanelRef.value.runExecution(
-    systemPrompt,
-    g_selectedInputPrompt.value,
-    g_generationOptions.value
-  )
+  responsePanelRef.value.runExecution(g_selectedInputPrompt.value, g_generationOptions.value)
 }
 
 const handleStreamState = (isStreaming) => {
   g_isStreaming.value = isStreaming
 }
 
-const handleUpdateInput = (prompt) => {
-  g_selectedInputPrompt.value = prompt
+const handleUpdateInput = (req) => {
+  g_selectedInputPrompt.value = req
 }
 
 const handleMetaToggle = (payload) => {
@@ -109,27 +97,9 @@ const handleMetaToggle = (payload) => {
 
     <main class="studio-layout">
       <section class="panel left-panel" :class="{ locked: g_isStreaming, covered: g_metaOpen }">
-        <div class="panel-header">
-          <div class="panel-title">
-            <h2>입력 정보 & 프롬프트 설정</h2>
-          </div>
-          <div class="model-selects">
-            <span class="model-select-label">모델 선택</span>
-            <select v-model="g_selectedProvider">
-              <option v-for="family in modelFamilies" :key="family.id" :value="family.id">
-                {{ family.label }}
-              </option>
-            </select>
-            <select v-model="g_selectedModel">
-              <option v-for="sub in subModelOptions" :key="sub" :value="sub">
-                {{ sub }}
-              </option>
-            </select>
-          </div>
-        </div>
 
         <div class="left-body">
-          <PromptManagerPanel @update:input="handleUpdateInput" @update:system="(p) => (g_selectedSystemPrompt = p)" />
+          <PromptManagerPanel @update:input="handleUpdateInput" />
         </div>
         <MetaDrawer
           v-if="g_metaOpen"
@@ -160,7 +130,6 @@ const handleMetaToggle = (payload) => {
           :api-path="providerApiPath"
           :model="g_selectedProvider"
           :model-version="g_selectedModel"
-          :system-prompt="g_selectedSystemPrompt"
           :input-prompt="g_selectedInputPrompt"
           @stream-state-change="handleStreamState"
           @meta-toggle="handleMetaToggle"

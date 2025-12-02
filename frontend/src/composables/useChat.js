@@ -63,12 +63,21 @@ export function useChat(apiPathSource, saveHistoryCallback, scrollToBottomCallba
           content: msg.text
         }))
 
-      await sendMessage(message, (chunk) => {
+      const req = {
+        req_id: Date.now().toString(),
+        model: selectedModel_.value || null,
+        version: null,
+        prompt: selectedPrompt_.value || '',
+        hist: history,
+        user_input: message
+      }
+
+      await sendMessage(req, (chunk) => {
         const assistantMsg = messages.value.find(msg => msg.id === assistantMessageId)
         if (assistantMsg) {
           assistantMsg.text += chunk
         }
-      }, resolveApiPath(), history, selectedModel_.value, selectedPrompt_.value)
+      }, resolveApiPath())
 
       // 응답시간 기록
       const endTime = Date.now()

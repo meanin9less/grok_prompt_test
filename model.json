@@ -1,0 +1,39 @@
+user_input_text = {
+    id:number,
+    title:str,
+    text:str
+}
+
+user_input_form = {
+    id:number,
+    title:str,
+    form:str(json)
+}
+
+prompt = {
+    id: ,
+    title: , 
+    text:
+}
+
+model = {
+    model_id: ,
+    model: ,
+    version:
+}
+
+req = {
+    req_id :,
+    model: ,
+    version: ,
+    prompt: ,
+    hist: ,
+    user_input : ,
+}
+
+res = {
+    req_id : ,
+    result_code : , 
+    result_msg : ,
+    ai_output : ,
+}

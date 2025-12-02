@@ -30,6 +30,7 @@ app.add_middleware(
 # 라우터 등록
 app.include_router(router)  # health check 포함
 app.include_router(chat_unified.router)
+app.include_router(chat_unified.ai_hub_router)
 
 
 @app.get("/")

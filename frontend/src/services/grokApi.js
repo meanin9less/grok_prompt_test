@@ -1,20 +1,8 @@
 const BACKEND_URL = 'http://localhost:8000'
 
-export async function sendMessage(message, onChunk, apiPath = '/api/chat/prompt-chat', history = [], model = null, prompt = null, modelVersion = null, inputTitle = '') {
-  const body = { message, history }
-  if (model) {
-    body.model = model
-  }
-  if (prompt) {
-    body.prompt = prompt
-  }
-  if (modelVersion) {
-    body.model_version = modelVersion
-  }
-  if (inputTitle) {
-    body.input_title = inputTitle
-  }
-  console.log('Sending message with model:', model || 'auto', 'model_version:', modelVersion || 'default', 'prompt:', prompt ? prompt.slice(0, 60) + '...' : 'none', 'Body:', body)
+export async function sendMessage(req, onChunk, apiPath = '/api/ai_hub/get_prompt_res_text') {
+  const body = req || {}
+  console.log('Sending req:', body)
 
   const response = await fetch(`${BACKEND_URL}${apiPath}`, {
     method: 'POST',
