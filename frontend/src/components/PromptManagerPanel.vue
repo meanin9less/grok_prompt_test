@@ -1,8 +1,13 @@
 <script setup>
 import { computed, onMounted, reactive, watch } from 'vue'
+import InputList from './InputList.vue'
+import InputDetail from './InputDetail.vue'
+import PromptSelectorModal from './PromptSelectorModal.vue'
+import FormTemplateModal from './FormTemplateModal.vue'
 
 const USER_INPUT_KEY = 'user_input_texts'
 const PROMPT_KEY = 'prompt_entries'
+const TEMPLATE_KEY = 'form_templates'
 
 const modelFamilies = [
   {
@@ -27,16 +32,34 @@ const DEFAULT_VERSION = 'grok-4-1-fast-reasoning'
 
 const emit = defineEmits(['update:input'])
 
+const parseOptions = (val) => {
+  if (Array.isArray(val)) return val.filter(Boolean)
+  return String(val || '')
+    .split(/\n|,/)
+    .map((o) => o.trim())
+    .filter(Boolean)
+}
+
+const toOptionObjects = (val) => {
+  const arr = parseOptions(val)
+  return arr.map((v) => ({ label: v, value: v }))
+}
+
 const state = reactive({
   userInputs: [],
   prompts: [],
+  templates: [],
   selectedInputId: null,
   detailMode: 'idle', // idle | view | create | edit
-  draft: { title: '', text: '', model: DEFAULT_PROVIDER, version: DEFAULT_VERSION, promptId: null },
+  draft: { title: '', text: '', model: DEFAULT_PROVIDER, version: DEFAULT_VERSION, promptId: null, inputType: 'text', templateId: null, formData: {} },
   promptModalOpen: false,
   promptMode: 'view', // view | create | edit
   selectedPromptId: null,
-  promptDraft: { title: '', text: '' }
+  promptDraft: { title: '', text: '' },
+  templateModalOpen: false,
+  templateMode: 'view',
+  selectedTemplateId: null,
+  templateDraft: { name: '', description: '', fields: [] }
 })
 
 const loadUserInputs = () => {
@@ -49,7 +72,10 @@ const loadUserInputs = () => {
           text: item.text || item.content || '',
           model: item.model || item.modelProvider || DEFAULT_PROVIDER,
           version: item.version || item.modelVersion || DEFAULT_VERSION,
-          promptId: item.promptId || item.systemPromptId || null
+          promptId: item.promptId || item.systemPromptId || null,
+          inputType: item.inputType || 'text',
+          templateId: item.templateId || null,
+          formData: item.formData || {}
         }))
       : []
   } catch (err) {
@@ -76,6 +102,45 @@ const loadPrompts = () => {
   }
 }
 
+const loadTemplates = () => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(TEMPLATE_KEY) || '[]')
+    state.templates = Array.isArray(raw)
+      ? raw.map((t) => ({
+          id: t.id || Math.random().toString(36).slice(2, 11),
+          name: t.name || '이름 없는 폼',
+          description: t.description || '',
+          schemaVersion: t.schemaVersion || 1,
+          fields: Array.isArray(t.fields)
+            ? t.fields.map((f, idx) => ({
+                id: f.id || `${Date.now()}-${idx}`,
+                name: f.name || `field_${idx}`,
+                label: f.label || f.name || `필드 ${idx + 1}`,
+                type: f.type || 'text',
+                required: Boolean(f.required),
+                options: Array.isArray(f.options)
+                  ? f.options.map((opt) =>
+                      typeof opt === 'string'
+                        ? { label: opt, value: opt }
+                        : { label: opt.label || opt.value || '', value: opt.value || opt.label || '' }
+                    )
+                  : toOptionObjects(f.options || []),
+                optionsInput: Array.isArray(f.options)
+                  ? f.options.map((opt) => (typeof opt === 'string' ? opt : opt.label || opt.value || '')).join('\n')
+                  : ''
+              }))
+            : []
+        }))
+      : []
+  } catch (err) {
+    state.templates = []
+  }
+}
+
+const persistTemplates = () => {
+  localStorage.setItem(TEMPLATE_KEY, JSON.stringify(state.templates))
+}
+
 const persistPrompts = () => {
   localStorage.setItem(PROMPT_KEY, JSON.stringify(state.prompts))
 }
@@ -86,8 +151,15 @@ const resetDraft = () => {
     text: '',
     model: DEFAULT_PROVIDER,
     version: DEFAULT_VERSION,
-    promptId: null
+    promptId: null,
+    inputType: 'text',
+    templateId: null,
+    formData: {}
   }
+}
+
+const updateDraft = (partial) => {
+  state.draft = { ...state.draft, ...partial }
 }
 
 const selectedInput = computed(() => state.userInputs.find((item) => item.id === state.selectedInputId) || null)
@@ -133,11 +205,22 @@ const emitReq = (input) => {
       text: promptObj?.text || ''
     },
     hist: [],
-    user_input: {
-      id: input.id,
-      title: input.title,
-      text: input.text
-    }
+    user_input:
+      (input.inputType || 'text') === 'form'
+        ? {
+            id: input.id,
+            title: input.title,
+            type: 'form',
+            template_id: input.templateId || null,
+            form: input.formData || {},
+            text: JSON.stringify(input.formData || {})
+          }
+        : {
+            id: input.id,
+            title: input.title,
+            text: input.text,
+            type: 'text'
+          }
   }
   emit('update:input', req)
 }
@@ -147,6 +230,11 @@ const startCreate = () => {
   state.selectedInputId = null
   resetDraft()
   emitReq(null)
+}
+
+const cancelEdit = () => {
+  state.detailMode = 'idle'
+  resetDraft()
 }
 
 const selectInput = (id) => {
@@ -167,7 +255,10 @@ const startEdit = () => {
     text: selectedInput.value.text,
     model: selectedInput.value.model || DEFAULT_PROVIDER,
     version: selectedInput.value.version || DEFAULT_VERSION,
-    promptId: selectedInput.value.promptId || null
+    promptId: selectedInput.value.promptId || null,
+    inputType: selectedInput.value.inputType || 'text',
+    templateId: selectedInput.value.templateId || null,
+    formData: selectedInput.value.formData || {}
   }
   state.selectedPromptId = selectedInput.value.promptId || null
 }
@@ -175,7 +266,8 @@ const startEdit = () => {
 const saveInput = () => {
   const title = state.draft.title.trim()
   const text = state.draft.text.trim()
-  if (!title || !text) return
+  if (!title) return
+  if (state.draft.inputType === 'text' && !text) return
 
   const id =
     state.detailMode === 'edit' && selectedInput.value
@@ -188,7 +280,10 @@ const saveInput = () => {
     text,
     model: state.draft.model,
     version: state.draft.version,
-    promptId: state.draft.promptId || null
+    promptId: state.draft.promptId || null,
+    inputType: state.draft.inputType || 'text',
+    templateId: state.draft.templateId || null,
+    formData: state.draft.formData || {}
   }
 
   const existingIndex = state.userInputs.findIndex((p) => p.id === id)
@@ -211,6 +306,18 @@ const deleteInput = () => {
   state.selectedInputId = null
   state.detailMode = 'idle'
   emitReq(null)
+}
+
+const updateTemplateSelection = (templateId) => {
+  state.draft.templateId = templateId || null
+  const tmpl = state.templates.find((t) => t.id === templateId)
+  if (tmpl) {
+    const nextFormData = {}
+    tmpl.fields.forEach((f) => {
+      nextFormData[f.name] = state.draft.formData?.[f.name] || ''
+    })
+    state.draft.formData = nextFormData
+  }
 }
 
 const openPromptModal = () => {
@@ -286,6 +393,153 @@ const savePrompt = () => {
   state.promptMode = 'view'
 }
 
+// Form templates CRUD
+const openTemplateModal = () => {
+  state.templateModalOpen = true
+  if (state.templates.length) {
+    const first = state.templates[0]
+    state.selectedTemplateId = first.id
+    state.templateDraft = { ...first, fields: [...first.fields] }
+    state.templateMode = 'view'
+  } else {
+    state.selectedTemplateId = null
+    state.templateDraft = { name: '', description: '', fields: [] }
+    state.templateMode = 'create'
+  }
+}
+
+const closeTemplateModal = () => {
+  state.templateModalOpen = false
+}
+
+const selectTemplateForModal = (id) => {
+  const found = state.templates.find((t) => t.id === id)
+  if (!found) return
+  state.selectedTemplateId = id
+  state.templateMode = 'view'
+  state.templateDraft = { ...found, fields: [...found.fields] }
+}
+
+const startTemplateCreate = () => {
+  state.templateMode = 'create'
+  state.selectedTemplateId = null
+  state.templateDraft = { name: '', description: '', fields: [] }
+}
+
+const startTemplateEdit = () => {
+  if (!state.selectedTemplateId) return
+  state.templateMode = 'edit'
+}
+
+const cancelTemplateEditOrCreate = () => {
+  if (state.templateMode === 'create') {
+    if (state.templates.length) {
+      const first = state.templates[0]
+      state.selectedTemplateId = first.id
+      state.templateDraft = { ...first, fields: [...first.fields] }
+      state.templateMode = 'view'
+    } else {
+      state.templateDraft = { name: '', description: '', fields: [] }
+      state.templateMode = 'view'
+    }
+    return
+  }
+  if (state.templateMode === 'edit') {
+    const current = state.templates.find((t) => t.id === state.selectedTemplateId)
+    if (current) state.templateDraft = { ...current, fields: [...current.fields] }
+    state.templateMode = 'view'
+  }
+}
+
+const saveTemplate = () => {
+  const name = state.templateDraft.name.trim()
+  if (!name) return
+  const id = state.selectedTemplateId || Math.random().toString(36).slice(2, 11)
+
+  const fields = Array.isArray(state.templateDraft.fields) ? state.templateDraft.fields : []
+  const normalizedFields = fields.map((f, idx) => {
+    const options = toOptionObjects(f.optionsInput ?? f.options)
+    return {
+      id: f.id || `${id}-${idx}`,
+      name: (f.name || '').trim(),
+      label: (f.label || '').trim(),
+      type: f.type || 'text',
+      required: Boolean(f.required),
+      options,
+      optionsInput: (f.optionsInput ?? options.map((o) => o.label || o.value || '').join('\n')) || ''
+    }
+  })
+
+  const hasEmpty = normalizedFields.some((f) => !f.name || !f.label)
+  if (hasEmpty) {
+    alert('라벨과 필드명은 비워둘 수 없습니다.')
+    return
+  }
+  const selectWithoutOptions = normalizedFields.some((f) => f.type === 'select' && (!Array.isArray(f.options) || f.options.length === 0))
+  if (selectWithoutOptions) {
+    alert('select 필드는 옵션을 한 개 이상 입력해야 합니다.')
+    return
+  }
+
+  const payload = {
+    id,
+    name,
+    description: state.templateDraft.description || '',
+    schemaVersion: state.templateDraft.schemaVersion || 1,
+    fields: normalizedFields
+  }
+  const idx = state.templates.findIndex((t) => t.id === id)
+  if (idx >= 0) state.templates.splice(idx, 1, payload)
+  else state.templates.unshift(payload)
+  persistTemplates()
+  state.selectedTemplateId = id
+  state.templateMode = 'view'
+}
+
+const deleteTemplate = () => {
+  if (!state.selectedTemplateId) return
+  if (!confirm('삭제하시겠습니까?')) return
+  state.templates = state.templates.filter((t) => t.id !== state.selectedTemplateId)
+  persistTemplates()
+  if (state.templates.length) {
+    const first = state.templates[0]
+    state.selectedTemplateId = first.id
+    state.templateDraft = { ...first, fields: [...first.fields] }
+    state.templateMode = 'view'
+  } else {
+    state.selectedTemplateId = null
+    state.templateDraft = { name: '', description: '', fields: [] }
+    state.templateMode = 'create'
+  }
+}
+
+const applyTemplate = () => {
+  if (!state.selectedTemplateId) return
+  updateTemplateSelection(state.selectedTemplateId)
+  state.templateModalOpen = false
+}
+
+const addTemplateField = () => {
+  const next = {
+    id: Math.random().toString(36).slice(2, 11),
+    name: '',
+    label: '',
+    type: 'text',
+    required: false,
+    options: [],
+    optionsInput: ''
+  }
+  state.templateDraft.fields = [...(state.templateDraft.fields || []), next]
+}
+
+const updateTemplateField = (id, partial) => {
+  state.templateDraft.fields = (state.templateDraft.fields || []).map((f) => (f.id === id ? { ...f, ...partial } : f))
+}
+
+const removeTemplateField = (id) => {
+  state.templateDraft.fields = (state.templateDraft.fields || []).filter((f) => f.id !== id)
+}
+
 const deletePrompt = () => {
   if (!state.selectedPromptId) return
   if (!confirm('삭제하시겠습니까?')) return
@@ -358,247 +612,81 @@ watch(
 onMounted(() => {
   loadUserInputs()
   loadPrompts()
+  loadTemplates()
 })
 </script>
 
 <template>
   <div class="prompt-manager two-col">
-    <div class="list-pane">
-      <div class="list-pane-header">
-        <div>
-          <p class="eyebrow">입력정보</p>
-          <h3>저장된 입력</h3>
-        </div>
-        <div class="list-actions">
-          <button class="ghost-btn xs" @click="startCreate">+ 새 입력</button>
-        </div>
-      </div>
+    <InputList
+      :items="state.userInputs"
+      :prompts="state.prompts"
+      :selected-id="state.selectedInputId"
+      @create="startCreate"
+      @select="selectInput"
+    />
 
-      <div class="list">
-        <div
-          v-for="input in state.userInputs"
-          :key="input.id"
-          class="list-item"
-          :class="{ active: state.selectedInputId === input.id }"
-          @click="selectInput(input.id)"
-        >
-          <div class="list-top">
-            <p class="title">{{ input.title }}</p>
-            <span class="pill mini">{{ input.model }}</span>
-          </div>
-          <p class="meta">{{ input.version }}</p>
-          <p class="meta light">프롬프트: {{ state.prompts.find((p) => p.id === input.promptId)?.title || '미선택' }}</p>
-        </div>
-        <div v-if="state.userInputs.length === 0" class="empty">리스트가 없습니다.</div>
-      </div>
-    </div>
-
-    <div class="detail-pane">
-      <div class="detail-header">
-        <div>
-          <p class="eyebrow" v-if="detailEyebrow">{{ detailEyebrow }}</p>
-          <h3>{{ detailTitle }}</h3>
-        </div>
-        <div class="header-actions">
-          <template v-if="state.detailMode === 'view' && selectedInput">
-            <button class="ghost-btn xs" @click="startEdit">수정</button>
-            <button class="ghost-btn xs danger" @click="deleteInput">삭제</button>
-          </template>
-        </div>
-      </div>
-
-      <div class="detail-body">
-        <template v-if="state.detailMode === 'create' || state.detailMode === 'edit'">
-          <div class="grid-two">
-            <div class="field">
-              <label>모델</label>
-              <select v-model="state.draft.model">
-                <option v-for="family in modelFamilies" :key="family.id" :value="family.id">
-                  {{ family.label }}
-                </option>
-              </select>
-            </div>
-            <div class="field">
-              <label>버전</label>
-              <select v-model="state.draft.version">
-                <option v-for="sub in currentModelVersions" :key="sub" :value="sub">
-                  {{ sub }}
-                </option>
-              </select>
-            </div>
-          </div>
-
-          <div class="field">
-            <label>프롬프트</label>
-            <div class="select-row">
-              <select v-model="state.draft.promptId">
-                <option value="">프롬프트 선택 안 함</option>
-                <option v-for="p in state.prompts" :key="p.id" :value="p.id">
-                  {{ p.title }}
-                </option>
-              </select>
-              <button class="ghost-btn xs" @click="openPromptModal">관리</button>
-            </div>
-            <p class="helper" v-if="state.draft.promptId">
-              미리보기: {{ state.prompts.find((p) => p.id === state.draft.promptId)?.text.slice(0, 120) }}
-            </p>
-          </div>
-
-          <div class="grid-two">
-            <div class="field">
-              <label>입력정보 이름</label>
-              <input v-model="state.draft.title" placeholder="입력정보 이름을 입력하세요." />
-            </div>
-            <div class="field">
-              <label>입력 형태</label>
-              <div class="segmented disabled">
-                <button class="active" disabled>텍스트</button>
-                <button disabled>폼 (준비 중)</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="field">
-            <label>입력 값</label>
-            <textarea v-model="state.draft.text" rows="8" placeholder="보낼 텍스트를 작성하세요."></textarea>
-          </div>
-
-          <div class="actions">
-            <button class="ghost-btn" @click="state.detailMode = 'idle'; resetDraft()">취소</button>
-            <button class="primary-btn" @click="saveInput">저장</button>
-          </div>
-        </template>
-
-        <template v-else-if="selectedInput">
-          <div class="info-grid">
-            <div class="field">
-              <label>모델 / 버전</label>
-              <div class="inline-pair">
-                <select :value="selectedInput.model" @change="updateSelectedModel($event.target.value)">
-                  <option v-for="family in modelFamilies" :key="family.id" :value="family.id">
-                    {{ family.label }}
-                  </option>
-                </select>
-                <select :value="selectedInput.version" @change="updateSelectedVersion($event.target.value)">
-                  <option v-for="sub in viewModelVersions" :key="sub" :value="sub">
-                    {{ sub }}
-                  </option>
-                </select>
-              </div>
-            </div>
-            <div class="field">
-              <label>프롬프트</label>
-              <div class="select-row">
-                <select :value="selectedInput.promptId || ''" @change="updateSelectedPrompt($event.target.value)">
-                  <option value="">프롬프트 선택 안 함</option>
-                  <option v-for="p in state.prompts" :key="p.id" :value="p.id">
-                    {{ p.title }}
-                  </option>
-                </select>
-                <button class="ghost-btn xs" @click="openPromptModal">관리</button>
-              </div>
-            </div>
-            <div class="field">
-              <label>입력정보 이름</label>
-              <div class="detail-card">{{ selectedInput.title }}</div>
-            </div>
-          </div>
-
-          <div class="field">
-            <label>입력 값</label>
-            <div class="detail-card"><pre>{{ selectedInput.text }}</pre></div>
-          </div>
-        </template>
-
-        <div v-else class="empty-detail">
-          좌측에서 입력정보를 선택하거나 추가하세요.
-        </div>
-      </div>
-    </div>
+    <InputDetail
+      :mode="state.detailMode"
+      :draft="state.draft"
+      :selected-input="selectedInput"
+      :prompts="state.prompts"
+      :templates="state.templates"
+      :model-families="modelFamilies"
+      :current-model-versions="currentModelVersions"
+      :view-model-versions="viewModelVersions"
+      :detail-title="detailTitle"
+      :detail-eyebrow="detailEyebrow"
+      @change-draft="updateDraft"
+      @save="saveInput"
+      @cancel="cancelEdit"
+      @start-edit="startEdit"
+      @delete="deleteInput"
+      @open-prompt-modal="openPromptModal"
+      @open-template-modal="openTemplateModal"
+      @update-selected-model="updateSelectedModel"
+      @update-selected-version="updateSelectedVersion"
+      @update-selected-prompt="updateSelectedPrompt"
+      @update-template="updateTemplateSelection"
+    />
   </div>
 
-  <teleport to="body">
-    <div class="prompt-modal" v-if="state.promptModalOpen">
-      <div class="prompt-modal-content">
-        <div class="modal-header">
-          <div>
-            <p class="eyebrow template-title">프롬프트 관리</p>
-            <h4>{{ state.promptMode === 'create' ? '새 프롬프트 추가' : '프롬프트 선택' }}</h4>
-          </div>
-          <div class="header-actions">
-            <button class="ghost-btn" @click="startPromptCreate">+ 프롬프트 추가</button>
-            <button class="ghost-btn" @click="closePromptModal">닫기</button>
-          </div>
-        </div>
-        <div class="template-layout">
-          <div class="template-list">
-            <div
-              v-for="p in state.prompts"
-              :key="p.id"
-              class="template-item"
-              :class="{ active: state.selectedPromptId === p.id }"
-              @click="selectPromptForModal(p.id)"
-            >
-              <p class="title">{{ p.title }}</p>
-              <p class="meta">본문 {{ p.text.length }}자</p>
-            </div>
-            <div v-if="state.prompts.length === 0" class="empty">프롬프트가 없습니다.</div>
-          </div>
-          <div class="template-detail">
-            <div class="field">
-              <label>제목</label>
-              <input
-                v-model="state.promptDraft.title"
-                :disabled="state.promptMode === 'view'"
-                placeholder="프롬프트 제목"
-              />
-            </div>
-            <div class="field">
-              <label>내용</label>
-              <textarea
-                v-model="state.promptDraft.text"
-                rows="8"
-                :disabled="state.promptMode === 'view'"
-                placeholder="프롬프트 내용을 입력하세요."
-              ></textarea>
-            </div>
-            <div class="actions">
-              <button
-                class="ghost-btn"
-                v-if="state.promptMode === 'view' && state.selectedPromptId"
-                @click="startPromptEdit"
-              >
-                수정
-              </button>
-              <button class="ghost-btn" v-else @click="cancelPromptEditOrCreate">취소</button>
-              <button
-                class="ghost-btn danger"
-                v-if="state.promptMode !== 'create' && state.selectedPromptId"
-                @click="deletePrompt"
-              >
-                삭제
-              </button>
-              <button
-                v-if="state.promptMode !== 'view'"
-                :class="['primary-btn', { 'save-btn': state.promptMode !== 'view' }]"
-                @click="savePrompt"
-              >
-                저장
-              </button>
-              <button
-                class="ghost-btn apply-btn"
-                @click="applyPrompt"
-                :disabled="!state.selectedPromptId || state.promptMode !== 'view'"
-                v-if="state.promptMode === 'view'"
-              >
-                적용
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </teleport>
+  <PromptSelectorModal
+    :open="state.promptModalOpen"
+    :prompts="state.prompts"
+    :selected-prompt-id="state.selectedPromptId"
+    :prompt-draft="state.promptDraft"
+    :prompt-mode="state.promptMode"
+    @close="closePromptModal"
+    @start-create="startPromptCreate"
+    @select="selectPromptForModal"
+    @start-edit="startPromptEdit"
+    @cancel="cancelPromptEditOrCreate"
+    @save="savePrompt"
+    @delete="deletePrompt"
+    @apply="applyPrompt"
+    @change-draft="(partial) => (state.promptDraft = { ...state.promptDraft, ...partial })"
+  />
+
+  <FormTemplateModal
+    :open="state.templateModalOpen"
+    :templates="state.templates"
+    :selected-template-id="state.selectedTemplateId"
+    :template-draft="state.templateDraft"
+    :template-mode="state.templateMode"
+    @close="closeTemplateModal"
+    @start-create="startTemplateCreate"
+    @select="selectTemplateForModal"
+    @start-edit="startTemplateEdit"
+    @cancel="cancelTemplateEditOrCreate"
+    @save="saveTemplate"
+    @delete="deleteTemplate"
+    @apply="applyTemplate"
+    @add-field="addTemplateField"
+    @update-field="updateTemplateField"
+    @remove-field="removeTemplateField"
+    @change-draft="(partial) => (state.templateDraft = { ...state.templateDraft, ...partial })"
+  />
 </template>
 
 <style scoped>
@@ -614,522 +702,8 @@ onMounted(() => {
   box-sizing: border-box;
 }
 
-.list-pane {
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 12px;
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.list-pane-header {
-  padding: 4px 2px 8px;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.list-pane-header h3 {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: -0.15px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.list-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.detail-pane {
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 12px;
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.read-only-form .readonly-box {
-  padding: 10px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.04);
-  color: #e6ecff;
-  font-size: 13px;
-}
-.template-name {
-  margin: 0 0 8px 0;
-  font-size: 12px;
-  color: rgba(230, 236, 255, 0.8);
-}
-.meta-preview {
-  margin: 6px 0 0;
-  font-size: 12px;
-  color: rgba(230, 236, 255, 0.75);
-  max-width: 460px;
-  white-space: pre-wrap;
-}
-
-.primary-btn.xs {
-  padding: 8px 12px;
-  font-size: 12px;
-}
-
-.list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  flex: 1;
-  overflow-y: auto;
-  box-sizing: border-box;
-}
-
-.list-item {
-  padding: 10px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
-  cursor: pointer;
-  transition: border-color 0.2s ease, transform 0.2s ease;
-}
-
-.list-item:hover {
-  border-color: rgba(99, 179, 255, 0.6);
-}
-
-.list-item.active {
-  border-color: rgba(99, 179, 255, 0.9);
-  background: rgba(99, 179, 255, 0.12);
-}
-
-.title {
-  margin: 0;
-  font-weight: 700;
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  overflow: hidden;
-}
-
-.list-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-}
-
-.meta {
-  margin: 4px 0 0;
-  font-size: 12px;
-  color: rgba(230, 236, 255, 0.8);
-}
-
-.meta.light {
-  color: rgba(230, 236, 255, 0.65);
-}
-
-.empty {
-  text-align: center;
-  color: rgba(230, 236, 255, 0.6);
-  padding: 12px;
-  font-size: 12px;
-}
-
-.detail-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: nowrap;
-}
-
-.detail-header > div:first-child {
-  flex: 1 1 0;
-  min-width: 0;
-}
-
-.detail-header h3 {
-  margin: 2px 0 0;
-  flex: 1 1 200px;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: nowrap;
-  justify-content: flex-end;
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-
-.pill {
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.08);
-  color: #e6ecff;
-  font-size: 12px;
-  letter-spacing: 0.02em;
-  flex-shrink: 0;
-}
-
-.pill.mini {
-  padding: 4px 8px;
-  font-size: 11px;
-}
-
-.ghost-btn {
-  padding: 8px 10px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.06);
-  color: #e6ecff;
-  cursor: pointer;
-  font-size: 12px;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.ghost-btn.danger {
-  border-color: rgba(255, 99, 99, 0.5);
-  color: #ffcaca;
-}
-
-.ghost-btn.xs {
-  padding: 6px 8px;
-  font-size: 11px;
-}
-
-.ghost-btn:hover {
-  border-color: rgba(99, 179, 255, 0.7);
-  box-shadow: 0 6px 18px rgba(99, 179, 255, 0.2);
-}
-
-.detail-body {
-  flex: 1;
-  overflow: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 12px;
-  min-height: 0;
-  padding-bottom: 14px;
-}
-
-.grid-two {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-.info-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 10px;
-}
-
-.inline-pair {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.inline-pair select {
-  width: 100%;
-}
-
-.segmented {
-  display: inline-flex;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 10px;
-  overflow: hidden;
-}
-
-.segmented button {
-  border: none;
-  background: transparent;
-  color: #e6ecff;
-  padding: 8px 10px;
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.segmented button.active {
-  background: rgba(99, 179, 255, 0.16);
-  color: #cfe7ff;
-}
-
-.segmented.disabled button {
-  cursor: not-allowed;
-  opacity: 0.7;
-}
-
-.select-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.select-row select {
-  flex: 1;
-}
-
-.field label {
-  display: block;
-  margin: 0 0 6px 0;
-  font-size: 12px;
-  color: rgba(230, 236, 255, 0.7);
-  letter-spacing: 0.04em;
-}
-
-.field input,
-.field textarea,
-.field select {
-  width: 100%;
-  min-width: 0;
-  box-sizing: border-box;
-  border-radius: 10px;
-  border: 1px solid rgba(99, 179, 255, 0.2);
-  background: rgba(255, 255, 255, 0.05);
-  color: #e6ecff;
-  padding: 10px;
-  font-size: 13px;
-  outline: none;
-  font-family: inherit;
-}
-
-.field textarea {
-  resize: vertical;
-  min-height: 120px;
-}
-
-.detail-card {
-  padding: 12px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-size: 13px;
-}
-
-.detail-card pre {
-  margin: 0;
-  white-space: pre-wrap;
-  font-family: inherit;
-}
-
-.actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  align-items: center;
-}
-
-.action-left {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-start;
-}
-
-.action-right {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-}
-
-.primary-btn {
-  padding: 10px 16px;
-  border: none;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #63b3ff 0%, #63ffdd 100%);
-  color: #0b1221;
-  font-weight: 700;
-  cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-  font-family: inherit;
-}
-
-.primary-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(99, 179, 255, 0.3);
-}
-
-.helper {
-  margin: 6px 0 0;
-  color: rgba(230, 236, 255, 0.7);
-  font-size: 12px;
-}
-
-.empty-detail {
-  padding: 14px;
-  border: 1px dashed rgba(255, 255, 255, 0.2);
-  border-radius: 12px;
-  color: rgba(230, 236, 255, 0.7);
-  text-align: center;
-}
-
-.prompt-modal {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(8px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 120;
-  padding: 20px;
-}
-
-.prompt-modal-content {
-  background: linear-gradient(135deg, rgba(12, 18, 32, 0.95), rgba(15, 23, 42, 0.95));
-  border: 1px solid rgba(99, 179, 255, 0.2);
-  border-radius: 16px;
-  padding: 20px;
-  width: 100%;
-  max-width: 760px;
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-  overflow: auto;
-  box-sizing: border-box;
-}
-
-.template-layout {
-  display: grid;
-  grid-template-columns: 0.65fr 1.35fr;
-  gap: 12px;
-  min-height: 0;
-  height: 100%;
-  min-width: 0;
-}
-
-.template-list {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  overflow-y: auto;
-  min-width: 0;
-}
-
-.template-item {
-  padding: 10px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
-  cursor: pointer;
-  color: #e6ecff;
-}
-
-.template-item.active {
-  border-color: rgba(99, 179, 255, 0.9);
-  background: rgba(99, 179, 255, 0.12);
-}
-
-.template-item .meta {
-  margin: 4px 0 0;
-  font-size: 11px;
-  color: rgba(230, 236, 255, 0.8);
-}
-
-.template-detail {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  overflow: auto;
-  color: #e6ecff;
-  min-height: 320px;
-  max-height: 70vh;
-  min-width: 0;
-}
-
-.template-detail .actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: nowrap;
-}
-
-.template-detail .actions .apply-btn {
-  margin-left: auto;
-}
-
-.template-detail .actions .save-btn {
-  margin-left: auto;
-}
-
-@media (max-width: 700px) {
-  .field-card {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  .field-card button {
-    align-self: flex-end;
-    width: auto;
-  }
-}
-
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid rgba(99, 179, 255, 0.2);
-  padding-bottom: 10px;
-  margin-bottom: 6px;
-}
-
-.modal-header h4 {
-  margin: 4px 0 0;
-  color: #ffffff;
-}
-
-.template-title {
-  color: #ffffff;
-}
-
-@media (max-width: 900px) {
-  .template-layout {
-    grid-template-columns: 1fr;
-  }
-}
-
-.system-modal .template-modal-content {
-  max-width: 760px;
-}
-
-.system-modal .template-detail {
-  max-height: 70vh;
-}
 @media (max-width: 1100px) {
   .prompt-manager {
-    grid-template-columns: 1fr;
-  }
-  .grid-two {
     grid-template-columns: 1fr;
   }
 }

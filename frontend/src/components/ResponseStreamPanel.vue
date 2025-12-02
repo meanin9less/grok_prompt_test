@@ -29,7 +29,7 @@ const isLoading = ref(false)
 const messagesContainer = ref(null)
 const currentMessage = ref('')
 const messages = ref([])
-const listOpen = ref(true)
+const listOpen = ref(false)
 
 const { parseMarkdown } = useChatMarkdown()
 
@@ -103,8 +103,13 @@ const runExecution = (req, generationOptions) => {
     model: req.model || props.model || 'unknown',
     modelVersion: req.version || props.modelVersion || '모델 미선택',
     promptContent: typeof req.prompt === 'string' ? req.prompt : req.prompt?.text || '',
-    inputRaw: typeof req.user_input === 'string' ? req.user_input : req.user_input?.text || '',
-    inputType: 'text',
+    inputRaw:
+      typeof req.user_input === 'string'
+        ? req.user_input
+        : req.user_input?.type === 'form'
+          ? JSON.stringify(req.user_input.form || req.user_input.text || {}, null, 2)
+          : req.user_input?.text || '',
+    inputType: req.user_input?.type || 'text',
     userPreview,
     responseText: '',
     createdAt: new Date().toISOString(),
@@ -208,6 +213,25 @@ watch(selectedRunId, () => {
       </aside>
 
       <section class="content">
+        <div class="run-summary" v-if="selectedRun">
+          <div>
+            <p class="eyebrow">출력</p>
+            <h4>{{ selectedRun?.title || '선택된 답변 없음' }}</h4>
+          </div>
+          <div class="summary-meta">
+            <div class="info-row">
+              <span class="label">사용된 모델</span>
+              <span class="value">{{ selectedRun?.model || 'unknown' }}</span>
+              <span class="label thin">버전</span>
+              <span class="value">{{ selectedRun?.modelVersion || '미선택' }}</span>
+            </div>
+            <div class="info-row">
+              <span class="label">입력정보 / 프롬프트</span>
+              <button class="ghost-btn xs" @click="openMeta" :disabled="!selectedRun">확인하기</button>
+            </div>
+          </div>
+        </div>
+
         <div class="stream-area" :ref="setMessagesContainer">
           <div v-if="!messages.length" class="empty">
             <div class="empty-card">
@@ -287,8 +311,8 @@ watch(selectedRunId, () => {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   padding: 10px;
-  width: 260px;
-  min-width: 260px;
+  width: 220px;
+  min-width: 220px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -299,6 +323,7 @@ watch(selectedRunId, () => {
 .sidebar.collapsed {
   width: 56px;
   min-width: 56px;
+  padding: 10px 6px;
 }
 
 .sidebar-header {
@@ -310,6 +335,8 @@ watch(selectedRunId, () => {
 
 .sidebar.collapsed .sidebar-header {
   justify-content: center;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .sidebar.collapsed .ghost-btn,
@@ -331,6 +358,10 @@ watch(selectedRunId, () => {
   margin-left: auto;
 }
 
+.sidebar.collapsed .toggle-btn {
+  margin-left: 0;
+}
+
 .answer-items {
   display: flex;
   flex-direction: column;
@@ -345,17 +376,16 @@ watch(selectedRunId, () => {
   padding: 10px 12px;
   background: rgba(255, 255, 255, 0.03);
   cursor: pointer;
-  transition: border-color 0.2s ease, transform 0.2s ease;
-}
-
-.answer-item:hover {
-  border-color: rgba(99, 179, 255, 0.7);
-  transform: translateY(-2px);
+  transition: border-color 0.2s ease, padding 0.2s ease;
 }
 
 .answer-item.active {
   border-color: rgba(99, 255, 221, 0.8);
   background: rgba(99, 255, 221, 0.08);
+}
+
+.answer-item:hover {
+  border-color: rgba(99, 179, 255, 0.7);
 }
 
 .item-titles .title {
@@ -388,14 +418,14 @@ watch(selectedRunId, () => {
 }
 
 .mini-index {
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.2);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  font-size: 12px;
   color: #e6ecff;
   flex-shrink: 0;
   background: rgba(255, 255, 255, 0.06);
@@ -409,6 +439,16 @@ watch(selectedRunId, () => {
 
 .sidebar.collapsed .item-titles {
   justify-content: center;
+}
+
+.sidebar.collapsed .answer-item {
+  padding: 8px 4px;
+}
+
+.sidebar.collapsed .mini-index {
+  width: 24px;
+  height: 24px;
+  font-size: 10px;
 }
 
 .content {
@@ -429,6 +469,54 @@ watch(selectedRunId, () => {
   background: rgba(255, 255, 255, 0.08);
   color: #e6ecff;
   font-size: 12px;
+}
+
+.run-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 8px;
+}
+
+.run-summary h4 {
+  margin: 4px 0 0;
+}
+
+.summary-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+}
+
+.info-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.info-row .label {
+  color: rgba(230, 236, 255, 0.75);
+  font-size: 12px;
+}
+
+.info-row .value {
+  font-weight: 700;
+  color: #fff;
+}
+
+.prompt-chip {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mono {
+  font-family: monospace;
 }
 
 .ghost-btn {

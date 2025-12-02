@@ -72,7 +72,7 @@ class OpenAIServicePrompt:
                                 content = delta.get("content", "")
                                 if content:
                                     # JSON으로 감싸 개행이 이스케이프된 상태로 단일 SSE 라인에 실어 보낸다
-                                    payload = json.dumps({"content": content})
+                                    payload = json.dumps({"ai_output": content})
                                     logger.debug(f"[OpenAI Chunk] {repr(content[:50])}")
                                     yield f"data: {payload}\n\n"
                         except json.JSONDecodeError:

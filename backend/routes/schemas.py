@@ -24,3 +24,13 @@ class AiHubRequest(BaseModel):
 
 class AiHubResponse(BaseModel):
   content: str
+
+
+class AiHubStreamHandshake(BaseModel):
+  req_id: str
+  result_code: int
+  result_msg: str
+
+
+class AiHubStreamChunk(BaseModel):
+  ai_output: str

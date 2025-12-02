@@ -1,15 +1,39 @@
+import json
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from services import grok_service_prompt, openai_service_prompt, gemini_service_prompt
 from utils import GrokAPIError
-from .schemas import AiHubRequest
+from .schemas import AiHubRequest, AiHubStreamHandshake, AiHubStreamChunk
 
 router = APIRouter(prefix="/api/chat", tags=["chat-unified"])
 ai_hub_router = APIRouter(prefix="/api/ai_hub", tags=["ai-hub"])
 
 
-@ai_hub_router.post("/get_prompt_res_text")
+@ai_hub_router.post(
+    "/get_prompt_res_text",
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "description": "SSE stream: first event is handshake {req_id, result_code, result_msg}, followed by ai_output chunks.",
+            "content": {
+                "text/event-stream": {
+                    "example": """
+data: {"req_id":"abc-123","result_code":0,"result_msg":"ok"}
+
+data: {"ai_output":"안녕하세요"}
+
+data: {"ai_output":" 반갑습니다"}
+
+"""
+                }
+            },
+        }
+    },
+)
 async def get_prompt_res_text(request: AiHubRequest):
+    if not request.req_id or not str(request.req_id).strip():
+        raise HTTPException(status_code=400, detail="req_id cannot be empty")
+
     if not request.user_input:
         raise HTTPException(status_code=400, detail="user_input cannot be empty")
 
@@ -53,6 +77,14 @@ async def get_prompt_res_text(request: AiHubRequest):
     try:
         async def generate():
             history = [{"role": "user", "content": item.text or ""} for item in request.hist] if request.hist else []
+            # 검증 성공 알림을 첫 SSE 이벤트로 전송
+            handshake = {
+                "req_id": request.req_id,
+                "result_code": 0,
+                "result_msg": "ok",
+            }
+            yield f"data: {json.dumps(handshake)}\n\n"
+
             async for chunk in service.stream_prompt_response(
                 message_text,
                 history,

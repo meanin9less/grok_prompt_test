@@ -17,6 +17,7 @@ export async function sendMessage(req, onChunk, apiPath = '/api/ai_hub/get_promp
   }
 
   let hasChunk = false
+  let handshakeReceived = false
 
   // 스트리밍이 불가능한 경우 텍스트로 한번에 처리
   if (!response.body) {
@@ -33,15 +34,18 @@ export async function sendMessage(req, onChunk, apiPath = '/api/ai_hub/get_promp
   let sseBuffer = ''
 
   const decodeChunk = (raw) => {
-    // JSON 라인이면 content/message 필드 추출, 아니면 이스케이프된 개행 복원
+    // JSON 라인이면 handshake(result_code 등)와 payload(ai_output 등)를 구분
     try {
       const parsed = JSON.parse(raw)
-      const text = parsed.content || parsed.message || ''
-      if (text) return text
+      if (Object.prototype.hasOwnProperty.call(parsed, 'result_code')) {
+        return { handshake: parsed }
+      }
+      const text = parsed.ai_output || parsed.content || parsed.message || ''
+      return { text: text ? String(text) : '' }
     } catch (err) {
       // not json, fall through
     }
-    return String(raw || '').replace(/\\n/g, '\n')
+    return { text: String(raw || '').replace(/\\n/g, '\n') }
   }
 
   try {
@@ -64,13 +68,31 @@ export async function sendMessage(req, onChunk, apiPath = '/api/ai_hub/get_promp
             if (!line.startsWith('data:')) continue
             const data = line.slice(5).trim()
             if (!data || data === '[DONE]') continue
-            hasChunk = true
-            onChunk(decodeChunk(data))
+            const { handshake, text } = decodeChunk(data)
+            if (handshake) {
+              handshakeReceived = true
+              if (handshake.result_code !== 0) {
+                throw new Error(handshake.result_msg || 'Request rejected by server')
+              }
+              continue
+            }
+            if (text) {
+              hasChunk = true
+              onChunk(text)
+            }
           }
         }
       } else {
-        hasChunk = true
-        onChunk(decodeChunk(decoded.trim()))
+        const { handshake, text } = decodeChunk(decoded.trim())
+        if (handshake) {
+          handshakeReceived = true
+          if (handshake.result_code !== 0) {
+            throw new Error(handshake.result_msg || 'Request rejected by server')
+          }
+        } else if (text) {
+          hasChunk = true
+          onChunk(text)
+        }
       }
     }
 
@@ -81,12 +103,26 @@ export async function sendMessage(req, onChunk, apiPath = '/api/ai_hub/get_promp
         if (!line.startsWith('data:')) continue
         const data = line.slice(5).trim()
         if (!data || data === '[DONE]') continue
-        hasChunk = true
-        onChunk(decodeChunk(data))
+        const { handshake, text } = decodeChunk(data)
+        if (handshake) {
+          handshakeReceived = true
+          if (handshake.result_code !== 0) {
+            throw new Error(handshake.result_msg || 'Request rejected by server')
+          }
+          continue
+        }
+        if (text) {
+          hasChunk = true
+          onChunk(text)
+        }
       }
     }
   } finally {
     reader.releaseLock()
+  }
+
+  if (handshakeReceived === false) {
+    console.warn('No handshake received from server; proceeding with parsed chunks only')
   }
 
   // 스트림 파싱에서 아무것도 읽지 못했을 때를 대비한 최종 안전망

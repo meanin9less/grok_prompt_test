@@ -69,7 +69,7 @@ export function useChat(apiPathSource, saveHistoryCallback, scrollToBottomCallba
         version: null,
         prompt: selectedPrompt_.value ? { id: 'inline', title: 'inline', text: selectedPrompt_.value } : null,
         hist: history,
-        user_input: { id: Date.now().toString(), title: 'inline', text: message }
+        user_input: { id: Date.now().toString(), title: 'inline', text: message, type: 'text' }
       }
 
       await sendMessage(req, (chunk) => {
