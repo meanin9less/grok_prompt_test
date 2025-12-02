@@ -694,6 +694,7 @@ watch(selectedRunId, () => {
   font-size: 11px;
   color: #9ce0ff;
   font-weight: 700;
+  flex-shrink: 0;
 }
 
 .drawer-backdrop {

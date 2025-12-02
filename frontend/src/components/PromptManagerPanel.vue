@@ -861,6 +861,7 @@ onMounted(() => {
 
 .list-pane-header {
   padding: 4px 2px 8px;
+  min-width: 0;
 }
 
 .list-pane-header h3 {
@@ -868,6 +869,9 @@ onMounted(() => {
   font-size: 14px;
   font-weight: 700;
   letter-spacing: -0.15px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .detail-pane {
@@ -927,10 +931,12 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
   margin-bottom: 10px;
+  flex-wrap: nowrap;
+  min-width: 0;
 }
 
 .tab-btn {
-  flex: 1;
+  flex: 1 1 0;
   padding: 10px 12px;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -939,6 +945,10 @@ onMounted(() => {
   cursor: pointer;
   font-size: 13px;
   transition: border-color 0.2s ease, background-color 0.2s ease;
+  min-width: 80px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .tab-btn.active {
@@ -956,6 +966,7 @@ onMounted(() => {
   cursor: pointer;
   font-weight: 700;
   font-size: 16px;
+  flex-shrink: 0;
 }
 
 .list {
@@ -1006,16 +1017,31 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  flex-wrap: nowrap;
+}
+
+.detail-header > div:first-child {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .detail-header h3 {
   margin: 2px 0 0;
+  flex: 1 1 200px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .header-actions {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .pill {
@@ -1026,6 +1052,7 @@ onMounted(() => {
   color: #e6ecff;
   font-size: 12px;
   letter-spacing: 0.02em;
+  flex-shrink: 0;
 }
 
 .pill.form {

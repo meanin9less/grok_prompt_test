@@ -98,9 +98,8 @@ const handleMetaToggle = (payload) => {
   <div class="app-shell">
     <header class="studio-header">
       <div class="header-content">
-        <p class="tagline">입력정보 / 프롬프트 구성</p>
-        <h1>프롬프트 스튜디오</h1>
-        <p class="subhead">입력정보를 구성하고 실행해 결과를 확인하세요.</p>
+        <h1>프롬프트 테스트</h1>
+        <p class="subhead">입력정보와 프롬프트를 구성하고 실행해 결과를 확인하세요.</p>
       </div>
       <div class="status-chip" :class="{ live: g_isStreaming }">
         <span class="dot"></span>
@@ -332,6 +331,7 @@ const handleMetaToggle = (payload) => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: nowrap;
 }
 
 .panel-title h2 {
@@ -339,12 +339,24 @@ const handleMetaToggle = (payload) => {
   font-size: 18px;
   font-weight: 800;
   letter-spacing: -0.2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.panel-title {
+  flex: 1 1 240px;
+  min-width: 0;
 }
 
 .model-selects {
   display: flex;
   gap: 10px;
   align-items: center;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  min-width: 0;
 }
 
 .model-select-label {
