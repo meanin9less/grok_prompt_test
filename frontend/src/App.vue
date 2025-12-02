@@ -115,6 +115,7 @@ const handleMetaToggle = (payload) => {
             <h2>입력 정보 & 프롬프트 설정</h2>
           </div>
           <div class="model-selects">
+            <span class="model-select-label">모델 선택</span>
             <select v-model="g_selectedProvider">
               <option v-for="family in modelFamilies" :key="family.id" :value="family.id">
                 {{ family.label }}
@@ -343,6 +344,14 @@ const handleMetaToggle = (payload) => {
 .model-selects {
   display: flex;
   gap: 10px;
+  align-items: center;
+}
+
+.model-select-label {
+  font-size: 13px;
+  color: rgba(230, 236, 255, 0.78);
+  white-space: nowrap;
+  font-weight: 600;
 }
 
 .model-selects select {
