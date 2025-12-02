@@ -27,7 +27,9 @@ const emit = defineEmits([
   'updateSelectedModel',
   'updateSelectedVersion',
   'updateSelectedPrompt',
-  'updateTemplate'
+  'updateTemplate',
+  'updateFormData',
+  'updateTemplateView'
 ])
 
 const onDraftChange = (partial) => emit('changeDraft', partial)
@@ -179,7 +181,7 @@ const displayValue = (val) => {
         <div class="field" v-if="(selectedInput.inputType || 'text') === 'form'">
           <label>폼 템플릿</label>
           <div class="inline-pair">
-            <select :value="selectedInput.templateId || ''" @change="emit('updateTemplate', $event.target.value)">
+            <select :value="selectedInput.templateId || ''" @change="emit('updateTemplateView', $event.target.value)">
               <option value="">템플릿 선택 안 함</option>
               <option v-for="t in templates" :key="t.id" :value="t.id">
                 {{ t.name }}
@@ -191,24 +193,17 @@ const displayValue = (val) => {
 
         <div class="field">
           <label>입력 값</label>
-          <div class="detail-card">
-            <template v-if="(selectedInput.inputType || 'text') === 'form'">
-              <div
-                v-if="selectedInput.templateId && selectedTemplate"
-                class="form-preview"
-              >
-                <div
-                  v-for="field in selectedTemplate.fields"
-                  :key="field.id"
-                  class="preview-row"
-                >
-                  <span class="preview-label">{{ field.label || field.name }}</span>
-                  <span class="preview-value">{{ displayValue((selectedInput.formData || {})[field.name] ?? '') }}</span>
-                </div>
-              </div>
-              <pre v-else>{{ JSON.stringify(selectedInput.formData || selectedInput.text || {}, null, 2) }}</pre>
-            </template>
-            <pre v-else>{{ selectedInput.text }}</pre>
+          <template v-if="(selectedInput.inputType || 'text') === 'form'">
+            <InputDetailForm
+              :draft="selectedInput"
+              :templates="templates"
+              @change-draft="emit('updateFormData', $event)"
+              @open-template-modal="emit('openTemplateModal')"
+              @update-template="emit('updateTemplateView', $event)"
+            />
+          </template>
+          <div class="detail-card" v-else>
+            <pre>{{ selectedInput.text }}</pre>
           </div>
         </div>
 

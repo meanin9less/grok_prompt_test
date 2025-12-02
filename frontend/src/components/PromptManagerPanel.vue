@@ -124,10 +124,7 @@ const loadTemplates = () => {
                         ? { label: opt, value: opt }
                         : { label: opt.label || opt.value || '', value: opt.value || opt.label || '' }
                     )
-                  : toOptionObjects(f.options || []),
-                optionsInput: Array.isArray(f.options)
-                  ? f.options.map((opt) => (typeof opt === 'string' ? opt : opt.label || opt.value || '')).join('\n')
-                  : ''
+                  : toOptionObjects(f.options || [])
               }))
             : []
         }))
@@ -458,15 +455,20 @@ const saveTemplate = () => {
 
   const fields = Array.isArray(state.templateDraft.fields) ? state.templateDraft.fields : []
   const normalizedFields = fields.map((f, idx) => {
-    const options = toOptionObjects(f.optionsInput ?? f.options)
+    const options = Array.isArray(f.options)
+      ? f.options.map((opt) =>
+          typeof opt === 'string'
+            ? { label: opt, value: opt }
+            : { label: opt.label || opt.value || '', value: opt.value || opt.label || '' }
+        )
+      : toOptionObjects(f.options)
     return {
       id: f.id || `${id}-${idx}`,
       name: (f.name || '').trim(),
       label: (f.label || '').trim(),
       type: f.type || 'text',
       required: Boolean(f.required),
-      options,
-      optionsInput: (f.optionsInput ?? options.map((o) => o.label || o.value || '').join('\n')) || ''
+      options
     }
   })
 
@@ -526,8 +528,7 @@ const addTemplateField = () => {
     label: '',
     type: 'text',
     required: false,
-    options: [],
-    optionsInput: ''
+    options: []
   }
   state.templateDraft.fields = [...(state.templateDraft.fields || []), next]
 }
@@ -592,6 +593,31 @@ const updateSelectedPrompt = (promptId) => {
   emitReq(updated)
 }
 
+const updateSelectedFormData = (partial) => {
+  if (!selectedInput.value) return
+  const updated = {
+    ...selectedInput.value,
+    ...partial,
+    formData: partial?.formData ? { ...selectedInput.value.formData, ...partial.formData } : selectedInput.value.formData
+  }
+  const idx = state.userInputs.findIndex((u) => u.id === selectedInput.value.id)
+  if (idx >= 0) state.userInputs.splice(idx, 1, updated)
+  persistUserInputs()
+  emitReq(updated)
+}
+
+const updateSelectedTemplateView = (templateId) => {
+  if (!selectedInput.value) return
+  const tmpl = state.templates.find((t) => t.id === templateId)
+  const nextFormData = {}
+  if (tmpl) {
+    tmpl.fields.forEach((f) => {
+      nextFormData[f.name] = selectedInput.value.formData?.[f.name] || ''
+    })
+  }
+  updateSelectedFormData({ templateId: templateId || null, formData: nextFormData })
+}
+
 watch(
   () => state.draft.model,
   (provider) => {
@@ -648,6 +674,8 @@ onMounted(() => {
       @update-selected-version="updateSelectedVersion"
       @update-selected-prompt="updateSelectedPrompt"
       @update-template="updateTemplateSelection"
+      @update-form-data="updateSelectedFormData"
+      @update-template-view="updateSelectedTemplateView"
     />
   </div>
 

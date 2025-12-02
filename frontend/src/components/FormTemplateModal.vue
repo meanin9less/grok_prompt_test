@@ -147,8 +147,16 @@ const onDraftChange = (partial) => emit('changeDraft', partial)
                     </div>
                     <textarea
                       :disabled="templateMode === 'view'"
-                      :value="f.optionsInput ?? (f.options || []).join('\n')"
-                      @input="emit('updateField', f.id, { optionsInput: $event.target.value, options: $event.target.value.split(/\n|,/).map((o) => o.trim()).filter(Boolean) })"
+                      :value="(f.options || []).map((o) => o.label || o.value || '').join('\n')"
+                      @input="
+                        emit('updateField', f.id, {
+                          options: $event.target.value
+                            .split(/\n|,/)
+                            .map((o) => o.trim())
+                            .filter(Boolean)
+                            .map((v) => ({ label: v, value: v }))
+                        })
+                      "
                       rows="3"
                       placeholder="예:\n1학년\n2학년\n3학년"
                     ></textarea>

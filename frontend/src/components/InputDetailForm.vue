@@ -65,7 +65,13 @@ const handleFileChange = (name, file) => {
             @change="handleFieldChange(field.name, $event.target.value)"
           >
             <option value="">선택하세요</option>
-            <option v-for="opt in field.options || []" :key="opt" :value="opt">{{ opt }}</option>
+            <option
+              v-for="opt in field.options || []"
+              :key="opt.value || opt.label"
+              :value="opt.value || opt.label"
+            >
+              {{ opt.label || opt.value }}
+            </option>
           </select>
           <p class="helper" v-if="!field.options || field.options.length === 0">옵션을 설정하세요.</p>
         </template>
