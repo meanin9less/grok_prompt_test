@@ -122,14 +122,22 @@ const emitReq = (input) => {
     emit('update:input', null)
     return
   }
-  const promptText = state.prompts.find((p) => p.id === input.promptId)?.text || ''
+  const promptObj = state.prompts.find((p) => p.id === input.promptId) || null
   const req = {
     req_id: input.id,
     model: input.model,
     version: input.version,
-    prompt: promptText,
+    prompt: {
+      id: promptObj?.id || '',
+      title: promptObj?.title || '',
+      text: promptObj?.text || ''
+    },
     hist: [],
-    user_input: input.text
+    user_input: {
+      id: input.id,
+      title: input.title,
+      text: input.text
+    }
   }
   emit('update:input', req)
 }

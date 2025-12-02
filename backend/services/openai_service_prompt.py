@@ -13,28 +13,30 @@ class OpenAIServicePrompt:
         self.base_url = settings.openai_api_base_url
         self.model = settings.openai_model
 
-    async def chat(self, message: str, history: list = None, model: str = None, prompt: str = None, model_version: str | None = None, input_title: str = None):
+    async def stream_prompt_response(self, user_input_text: str, history: list = None, model: str = None, prompt_text: str = "", model_version: str | None = None, req_id: str | None = None):
         """
-        OpenAI API에 프롬프트를 포함하여 메시지를 보내고 스트림 형식으로 응답을 받습니다.
-
-        Parameters:
-        - message: 사용자 메시지
-        - history: 대화 히스토리
-        - prompt_key: 사용할 프롬프트 키
-        - model: 사용할 모델 (미지정 시 기본값 사용)
+        OpenAI API에 프롬프트/입력을 보내고 스트림 응답을 반환합니다.
         """
-        prompt = prompt if prompt is not None else ""
-        logger.info("[Service] chat call", extra={"model": model, "model_version": model_version or self.model, "input_title": input_title, "prompt_len": len(prompt or "")})
+        prompt_text = prompt_text or ""
+        logger.info(
+            "[Service] stream_prompt_response",
+            extra={
+                "model": model,
+                "model_version": model_version or self.model,
+                "req_id": req_id,
+                "prompt_len": len(prompt_text)
+            }
+        )
 
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
 
-        messages = [{"role": "system", "content": prompt}]
+        messages = [{"role": "system", "content": prompt_text}]
         if history:
             messages.extend(history)
-        messages.append({"role": "user", "content": message})
+        messages.append({"role": "user", "content": user_input_text})
 
         # 요청에서 지정한 모델 또는 기본값 사용
         use_model = model_version if model_version else self.model
