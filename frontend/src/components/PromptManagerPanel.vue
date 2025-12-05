@@ -192,6 +192,23 @@ const emitReq = (input) => {
     return
   }
   const promptObj = state.prompts.find((p) => p.id === input.promptId) || null
+  const templateObj = state.templates.find((t) => t.id === input.templateId) || null
+  const templatePayload = templateObj
+    ? {
+        id: templateObj.id,
+        name: templateObj.name,
+        description: templateObj.description,
+        fields: Array.isArray(templateObj.fields)
+          ? templateObj.fields.map((f) => ({
+              id: f.id,
+              name: f.name,
+              label: f.label,
+              type: f.type,
+              value: input.formData?.[f.name] ?? ''
+            }))
+          : []
+      }
+    : null
   const req = {
     req_id: input.id,
     model: input.model,
@@ -208,9 +225,9 @@ const emitReq = (input) => {
             id: input.id,
             title: input.title,
             type: 'form',
-            template_id: input.templateId || null,
             form: input.formData || {},
-            text: JSON.stringify(input.formData || {})
+            text: JSON.stringify(input.formData || {}),
+            template: templatePayload
           }
         : {
             id: input.id,

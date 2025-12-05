@@ -64,7 +64,6 @@ class GeminiServicePrompt:
                                 if content:
                                     # JSON으로 감싸 개행이 이스케이프된 상태로 단일 SSE 라인에 실어 보낸다
                                     payload = json.dumps({"ai_output": content})
-                                    logger.debug(f"[Gemini Chunk] {repr(content[:50])}")
                                     yield f"data: {payload}\n\n"
                         except json.JSONDecodeError:
                             continue

@@ -2,7 +2,7 @@ const BACKEND_URL = 'http://localhost:8000'
 
 export async function sendMessage(req, onChunk, apiPath = '/api/ai_hub/get_prompt_res_text') {
   const body = req || {}
-  console.log('Sending req:', body)
+  
 
   const response = await fetch(`${BACKEND_URL}${apiPath}`, {
     method: 'POST',
@@ -134,6 +134,10 @@ export async function sendMessage(req, onChunk, apiPath = '/api/ai_hub/get_promp
       console.warn('Fallback read failed', err)
     }
   }
+}
+
+export async function submitForm(req, onChunk, apiPath = '/api/forms/submit') {
+  return sendMessage(req, onChunk, apiPath)
 }
 
 export async function healthCheck() {

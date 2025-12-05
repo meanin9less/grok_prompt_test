@@ -18,15 +18,7 @@ class GrokServicePrompt:
         Grok API에 프롬프트/입력을 보내고 스트림 응답을 반환합니다.
         """
         prompt_text = prompt_text or ""
-        logger.info(
-            "[Service] stream_prompt_response",
-            extra={
-                "model": model,
-                "model_version": model_version or self.model,
-                "req_id": req_id,
-                "prompt_len": len(prompt_text)
-            }
-        )
+        logger.info(user_input_text)
 
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -73,7 +65,6 @@ class GrokServicePrompt:
                                 if content:
                                     # JSON으로 감싸 개행이 이스케이프된 상태로 단일 SSE 라인에 실어 보낸다
                                     payload = json.dumps({"ai_output": content})
-                                    logger.debug(f"[Grok Chunk] {repr(content[:50])}")
                                     yield f"data: {payload}\n\n"
                         except json.JSONDecodeError:
                             continue

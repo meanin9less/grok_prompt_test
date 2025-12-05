@@ -2,14 +2,17 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from config import settings
-from routes import router
-from routes import chat_unified
+from routes import router, ai_hub_router
 
 # 로깅 설정
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
+
+# Suppress noisy httpx/httpcore debug logs
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 # FastAPI 앱 초기화
 app = FastAPI(
@@ -29,7 +32,7 @@ app.add_middleware(
 
 # 라우터 등록
 app.include_router(router)  # health check 포함
-app.include_router(chat_unified.ai_hub_router)
+app.include_router(ai_hub_router)
 
 
 @app.get("/")
