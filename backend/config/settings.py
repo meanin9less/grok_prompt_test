@@ -15,8 +15,11 @@ class Settings(BaseSettings):
 
     # Gemini API Configuration
     gemini_api_key: Optional[str] = None
-    gemini_api_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai"
+    gemini_api_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
     gemini_model: str = "gemini-2.0-flash"
+
+    # Database
+    database_url: Optional[str] = None  # e.g., postgresql://grok:grokpass@localhost:5432/grokdb
 
     # FastAPI Configuration
     debug: bool = False

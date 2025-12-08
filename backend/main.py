@@ -3,6 +3,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from config import settings
 from routes import router, ai_hub_router
+from routes import templates_api
+from db.session import init_engine, close_engine
 
 # 로깅 설정
 logging.basicConfig(
@@ -33,6 +35,7 @@ app.add_middleware(
 # 라우터 등록
 app.include_router(router)  # health check 포함
 app.include_router(ai_hub_router)
+app.include_router(templates_api.router)
 
 
 @app.get("/")
@@ -54,3 +57,13 @@ if __name__ == "__main__":
         port=8000,
         reload=settings.debug,
     )
+
+
+@app.on_event("startup")
+async def on_startup():
+    init_engine()
+
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    await close_engine()
